@@ -1,0 +1,36 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "fix-upload-controller-import",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"npx -y true\"",
+			"isBackground": false
+		},
+		{
+			"label": "apply-patch-uploadcontroller",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"& { (Get-Content Controllers\\uploadController.js) -replace \"'../DB/mysql.js'\",\"'../Config/mySql.js'\" | Set-Content Controllers\\uploadController.js }\"",
+			"isBackground": false
+		},
+		{
+			"label": "patch-upload-controller",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"(Get-Content Controllers\\uploadController.js) -replace '../DB/mysql.js','../Config/mySql.js' -replace '\\.pipe\\(iconv.encodeStream\\(\\\"utf8\\\"\\)\\)\\\\s*','' | Set-Content Controllers\\uploadController.js; Write-Output 'patched' ; Get-Content Controllers\\uploadController.js -Head 60\"",
+			"args": [],
+			"isBackground": false
+		},
+		{
+			"label": "noop",
+			"type": "shell",
+			"command": "echo noop",
+			"isBackground": false
+		},
+		{
+			"label": "apply-uploadcontroller-fix",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"& {Get-Content Controllers\\uploadController.js -Raw} \"",
+			"isBackground": false
+		}
+	]
+}

@@ -1,0 +1,2 @@
+﻿Class,BusA,Cost Ctr,SNo.,Asset,Asset Description,Quantity,Amount,DCStart,DepKy,Use,Cost Order,Plnd.O.Dep,CoCd,Description,Business area
+IT,BA,100,1,TestAsset,Desc,1,100,2020-01-01,DP,50,CO1,0,CCD,Desc,BArea
