@@ -12,17 +12,17 @@ const headerMap = {
   class: ["class"],
   busa: ["busa", "bus_a"],
   cost_ctr: ["cost_ctr", "cost_centre"],
-  s_no: ["s_no", "sno"],
+  s_no: ["s_no", "sno","SNo."],
   asset: ["asset"],
   asset_description: ["asset_description"],
   asset_main_no_text: ["asset_main_no_text"],
   quantity: ["quantity"],
   amount: ["amount"],
-  dc_start: ["dc_start"],
+  dc_start: ["dc_start","DCStart"],
   dep: ["dep", "depky"],
   use: ["use"],
   cost_order: ["cost_order"],
-  pln_o_dep: ["pln_o_dep"],
+  pln_o_dep: ["pln_o_dep","Plnd_O_Dep","Planned_Obligations_Depreciation"],
   cocd: ["cocd"],
   description: ["description"],
   business_area: ["business_area"]
@@ -91,8 +91,8 @@ export const uploadUniversal = async (req, res) => {
     });
 
     let inserted = 0, errs = [];
-
-    for (let i = 0; i < normalized.length; i++) {
+//normalized.length
+    for (let i = 0; i < 2; i++) {
       const r = normalized[i];
       if (!r.asset) continue;
 
@@ -108,9 +108,9 @@ export const uploadUniversal = async (req, res) => {
 
         await pool.query(
           `INSERT INTO nbc_assets  (class, bus_A, cost_centre, sno, asset, asset_description, asset_main_no_text, quantity, amount, dc_start, depky, use_percentage, CostOrder, planned_dep, CoCd, description, business_area, barcode, asset_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [r.class||null, r.busa||null, r.cost_ctr||null, r.s_no||null, r.asset||null, r.asset_description||null, r.asset_main_no_text||null, r.quantity||null, r.amount||null, r.dc_start||null, r.dep||null, r.use||null, r.cost_order||null, r.pln_o_dep||null, r.cocd||null, r.description||null, r.business_area||null, barcode, key]
+          [r.class||null, r.busa||null, r.cost_ctr||null, r.s_no||null, r.asset||null, r.asset_description||null, r.asset_main_no_text||null, r.quantity||null, r.amount||null, r.dcstart||null, r.dep||null, r.use||null, r.cost_order||null, r.plnd_o_dep||null, r.cocd||null, r.description||null, r.business_area||null, barcode, key]
         );
-
+        
         // await pool.query(
         //   `INSERT INTO hospital_assets (sr_no, aster_tag_number, vk_new_tag_number, make, model, block, wing, floor, location, aster_info_not_in_far, vk_remarks, fa_reco_resolution, aster_spoc_remarks, audit_date, asset_key, asset) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         //   [r.sr_no||null, r.aster_tag_number||null, r.vk_new_tag_number||null, r.make||null, r.model||null, r.block||null, r.wing||null, r.floor||null, r.location||null, r.aster_info_not_in_far||null, r.vk_remarks||null, r.fa_reco_resolution||null, r.aster_spoc_remarks||null, r.audit_date||null, key, r.asset||null]

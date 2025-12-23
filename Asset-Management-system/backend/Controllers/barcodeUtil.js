@@ -1,5 +1,4 @@
-function generateBarcode(costCentre, busA, assetClass) {
+export function generateBarcode(costCentre, busA, assetClass) {
     return `${costCentre}${busA}${assetClass}`;
 }
 
-module.exports = { generateBarcode };
