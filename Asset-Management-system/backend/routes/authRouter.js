@@ -8,6 +8,7 @@ import {
   getOnlineStatus,      // NEW
   getOnlineUsers,
   adminSignup,
+  userLogin
 } from "../Controllers/authController.js";
 import {
   refreshAccessToken,
@@ -24,6 +25,7 @@ const authRouter = express.Router();
  *     tags: [Authentication]
  */
 authRouter.post("/admin/signup", adminSignup);
+
 
 /**
  * @swagger
@@ -284,5 +286,85 @@ authRouter.get("/online-status", getOnlineStatus);
  *         description: Admin access required
  */
 authRouter.get("/online-users", getOnlineUsers);
+
+/**
+ * @swagger
+ * /api/auth/user/login:
+ *   post:
+ *     summary: User login (doctor, nurse, etc.)
+ *     tags: [Authentication]
+ *     description: Authenticates a user by organizationId/email/password, returns JWT/refresh token, user/org info, and permissions.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - organizationId
+ *               - email
+ *               - password
+ *             properties:
+ *               organizationId:
+ *                 type: string
+ *                 example: HOSP-2024-001
+ *               email:
+ *                 type: string
+ *                 example: doctor@valuekare.com
+ *               password:
+ *                 type: string
+ *                 example: encrypted_password_hash
+ *               rememberMe:
+ *                 type: boolean
+ *                 example: true
+ *               deviceInfo:
+ *                 type: object
+ *                 properties:
+ *                   userAgent:
+ *                     type: string
+ *                   ipAddress:
+ *                     type: string
+ *                   deviceType:
+ *                     type: string
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: true
+ *               data:
+ *                 accessToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                 refreshToken: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                 expiresIn: 3600
+ *                 user:
+ *                   id: "user_12345"
+ *                   email: "doctor@valuekare.com"
+ *                   name: "Dr. Sarah Johnson"
+ *                   role: "doctor"
+ *                   panel: "user"
+ *                   organizationId: "HOSP-2024-001"
+ *                   organizationName: "ValueKare Medical Center"
+ *                   department: "Cardiology"
+ *                   ward: "Ward-3A"
+ *                   permissions: ["view_equipment", "report_issues", "request_replacement"]
+ *                 organization:
+ *                   id: "HOSP-2024-001"
+ *                   name: "ValueKare Medical Center"
+ *                   logo: "https://cdn.valuekare.com/logos/hosp-001.png"
+ *                   timezone: "Asia/Kolkata"
+ *                   currency: "INR"
+ *       401:
+ *         description: Invalid credentials or organization
+ *         content:
+ *           application/json:
+ *             example:
+ *               success: false
+ *               error:
+ *                 code: "INVALID_CREDENTIALS"
+ *                 message: "Invalid email or password"
+ *                 details: null
+ */
+authRouter.post("/user/login", userLogin);
 
 export default authRouter;

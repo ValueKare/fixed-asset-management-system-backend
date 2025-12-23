@@ -1,10 +1,15 @@
 import mongoose from "mongoose";
 
 const departmentSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
   name: { type: String, required: true },
-  number: { type: String, unique: true },
-  description: String,
-  hospitalId: { type: mongoose.Schema.Types.ObjectId, ref: "Hospital" }
+  code: { type: String },
+  building: { type: String },
+  floor: { type: String },
+  headOfDepartment: { type: String },
+  totalAssets: { type: Number, default: 0 },
+  totalStaff: { type: Number, default: 0 },
+  costCenters: [{ type: String }]
 });
 
 export default mongoose.model("Department", departmentSchema);

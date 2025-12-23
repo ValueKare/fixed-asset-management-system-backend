@@ -3,6 +3,8 @@ import Employee from "../Models/Employee.js";
 import LoginActivity from "../Models/LoginActivity.js";
 import { generateToken } from "../Utils/jwt.js";
 import bcrypt from "bcrypt";
+import mongoose from "mongoose";
+import Hospital from "../Models/Hospital.js";
 
 export const adminSignup = async (req, res) => {
   try {
@@ -46,6 +48,112 @@ export const adminSignup = async (req, res) => {
   }
 };
 
+
+// User login: authenticate by organizationId/email/password, fetch role permissions, return required structure
+export const userLogin = async (req, res) => {
+  try {
+    const { organizationId, email, password, rememberMe, deviceInfo } = req.body;
+    if (!organizationId || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "MISSING_FIELDS", message: "organizationId, email, and password are required", details: null }
+      });
+    }
+
+    // Find hospital (organization)
+    // const Hospital = (await import("../Models/Hospital.js")).default;
+    // import mongoose from "mongoose";
+    const orgIdOrCode = organizationId;
+    let orgObjectId = null;
+    if (mongoose.Types.ObjectId.isValid(orgIdOrCode)) {
+      orgObjectId = new mongoose.Types.ObjectId(orgIdOrCode);
+    }
+    const hospital = await Hospital.findOne({
+      $or: [
+        orgObjectId ? { _id: orgObjectId } : null,
+        { name: orgIdOrCode },
+        { code: orgIdOrCode }
+      ].filter(Boolean)
+    });
+    if (!hospital) {
+      return res.status(401).json({
+        success: false,
+        error: { code: "INVALID_ORGANIZATION", message: "Invalid organization", details: null }
+      });
+    }
+
+    // Find employee (user)
+    const employee = await Employee.findOne({ email, hospital: hospital._id }).lean();
+    if (!employee) {
+      return res.status(401).json({
+        success: false,
+        error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password", details: null }
+      });
+    }
+
+    // Check password
+    const bcrypt = (await import("bcrypt")).default;
+    const passwordMatch = await bcrypt.compare(password, employee.password);
+    if (!passwordMatch) {
+      return res.status(401).json({
+        success: false,
+        error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password", details: null }
+      });
+    }
+
+    // Fetch role/panel permissions
+    const Role = (await import("../Models/Role.js")).default;
+    const roleDoc = await Role.findOne({ name: employee.panel });
+    const permissions = roleDoc ? roleDoc.permissions : {};
+
+    // Fetch department and ward
+    const department = employee.department || null;
+    const ward = employee.ward || null;
+
+    // Update online status
+    await Employee.updateOne({ _id: employee._id }, { isOnline: true, lastLogin: new Date() });
+
+    // Prepare tokens
+    const { generateToken } = await import("../Utils/jwt.js");
+    const expiresIn = rememberMe ? 60 * 60 * 24 * 30 : 60 * 60; // 30d or 1h
+    const accessToken = generateToken({ id: employee._id, email, panel: employee.panel, organizationId: hospital._id }, expiresIn + "s");
+    const refreshToken = generateToken({ id: employee._id, type: "refresh" }, expiresIn * 2 + "s");
+
+    // Build response
+    return res.status(200).json({
+      success: true,
+      data: {
+        accessToken,
+        refreshToken,
+        expiresIn,
+        user: {
+          id: employee._id,
+          email: employee.email,
+          name: employee.name,
+          role: employee.panel,
+          panel: "user",
+          organizationId: hospital._id,
+          organizationName: hospital.name,
+          department,
+          ward,
+          permissions
+        },
+        organization: {
+          id: hospital._id,
+          name: hospital.name,
+          logo: hospital.logo || null,
+          timezone: hospital.timezone || "Asia/Kolkata",
+          currency: hospital.currency || "INR"
+        }
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: error.message, details: null }
+    });
+  }
+};
 
 // Admin login: lookup by username or email, validate password, set isOnline, create token
 export const adminLogin = async (req, res) => {

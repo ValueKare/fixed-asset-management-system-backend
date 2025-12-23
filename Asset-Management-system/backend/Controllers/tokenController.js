@@ -12,4 +12,3 @@ export const resetPassword = (req, res) => {
   // Placeholder: verify token and update password
   res.json({ message: "Password has been reset (placeholder)" });
 };
-4

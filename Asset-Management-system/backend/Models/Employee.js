@@ -7,6 +7,9 @@ const employeeSchema = new mongoose.Schema({
   department: { type: String },
   email: { type: String },
   password: { type: String, required: true },
+  hospital: { type: mongoose.Schema.Types.ObjectId, ref: "Hospital", required: true }, // for organization linkage
+  panel: { type: String, required: true }, // e.g. doctor, nurse, etc.
+  ward: { type: String },
   isOnline: { type: Boolean, default: false },
   lastLogin: { type: Date },
   lastLogout: { type: Date }
