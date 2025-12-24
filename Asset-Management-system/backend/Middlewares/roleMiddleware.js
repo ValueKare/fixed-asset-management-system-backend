@@ -33,8 +33,24 @@ export const isAdmin = (req, res, next) => {
 
 export const authorizeRoles = (...roles) => {
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ message: "Access denied" });
+    // Extract role from JWT token if not already in req.user
+    if (!req.user) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    
+    // Ensure req.user has role from JWT token
+    const userRole = req.user.role;
+    
+    if (!userRole) {
+      return res.status(401).json({ message: "Role not found in token" });
+    }
+    
+    if (!roles.includes(userRole)) {
+      return res.status(403).json({ 
+        message: "Access denied",
+        required: roles,
+        current: userRole
+      });
     }
     next();
   };

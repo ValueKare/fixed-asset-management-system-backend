@@ -5,18 +5,19 @@ import { generateToken } from "../Utils/jwt.js";
 import bcrypt from "bcrypt";
 import mongoose from "mongoose";
 import Hospital from "../Models/Hospital.js";
-
+import Role from "../Models/Role.js";
 export const adminSignup = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, panel, organizationId } = req.body;
 
-    if (!username || !password) {
-      return res.status(400).json({ message: "Username and password are required" });
+    if (!username || !password || !panel || !organizationId) {
+      return res.status(400).json({ message: "Username, password, panel, and organizationId are required" });
     }
 
     // Check if admin already exists
     const existing = await Admin.findOne({
-      $or: [{ username }, { email }]
+      $or: [{ username }, { email }],
+      organizationId
     });
     if (existing) {
       return res.status(400).json({ message: "Admin already exists" });
@@ -29,7 +30,9 @@ export const adminSignup = async (req, res) => {
       username,
       email,
       password: hashedPassword,
-      role: "admin",
+      role: panel === 'superadmin' ? 'superadmin' : 'admin',
+      panel,
+      organizationId,
       isOnline: false,
       lastLogin: null,
       lastLogout: null
@@ -40,7 +43,10 @@ export const adminSignup = async (req, res) => {
       admin: {
         id: admin._id,
         username: admin.username,
-        email: admin.email
+        email: admin.email,
+        role: admin.role,
+        panel: admin.panel,
+        organizationId: admin.organizationId
       }
     });
   } catch (error) {
@@ -50,108 +56,202 @@ export const adminSignup = async (req, res) => {
 
 
 // User login: authenticate by organizationId/email/password, fetch role permissions, return required structure
+
+
 export const userLogin = async (req, res) => {
   try {
-    const { organizationId, email, password, rememberMe, deviceInfo } = req.body;
+    const { organizationId, email, password, rememberMe } = req.body;
+
+    // 1️⃣ Basic validation
     if (!organizationId || !email || !password) {
       return res.status(400).json({
         success: false,
-        error: { code: "MISSING_FIELDS", message: "organizationId, email, and password are required", details: null }
+        error: {
+          code: "MISSING_FIELDS",
+          message: "organizationId, email, and password are required",
+          details: null
+        }
       });
     }
 
-    // Find hospital (organization)
-    // const Hospital = (await import("../Models/Hospital.js")).default;
-    // import mongoose from "mongoose";
-    const orgIdOrCode = organizationId;
-    let orgObjectId = null;
-    if (mongoose.Types.ObjectId.isValid(orgIdOrCode)) {
-      orgObjectId = new mongoose.Types.ObjectId(orgIdOrCode);
-    }
-    const hospital = await Hospital.findOne({
-      $or: [
-        orgObjectId ? { _id: orgObjectId } : null,
-        { name: orgIdOrCode },
-        { code: orgIdOrCode }
-      ].filter(Boolean)
+    // 2️⃣ Find employee FIRST (important)
+    // organizationId is stored in Employee, not Hospital
+    const employee = await Employee.findOne({
+      email,
+      organizationId,
+      status: "Active"
     });
-    if (!hospital) {
-      return res.status(401).json({
-        success: false,
-        error: { code: "INVALID_ORGANIZATION", message: "Invalid organization", details: null }
-      });
-    }
 
-    // Find employee (user)
-    const employee = await Employee.findOne({ email, hospital: hospital._id }).lean();
     if (!employee) {
       return res.status(401).json({
         success: false,
-        error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password", details: null }
+        error: {
+          code: "INVALID_CREDENTIALS",
+          message: "Invalid email or password",
+          details: null
+        }
       });
     }
 
-    // Check password
-    const bcrypt = (await import("bcrypt")).default;
+    // 3️⃣ Verify password
     const passwordMatch = await bcrypt.compare(password, employee.password);
     if (!passwordMatch) {
       return res.status(401).json({
         success: false,
-        error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password", details: null }
+        error: {
+          code: "INVALID_CREDENTIALS",
+          message: "Invalid email or password",
+          details: null
+        }
       });
     }
 
-    // Fetch role/panel permissions
-    const Role = (await import("../Models/Role.js")).default;
+    // 4️⃣ Fetch hospital USING employee.hospital
+    // Do NOT use organizationId here
+    const hospital = await Hospital.findById(employee.hospital);
+
+    if (!hospital) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: "INVALID_ORGANIZATION",
+          message: "Hospital not found for this user",
+          details: null
+        }
+      });
+    }
+
+    // 5️⃣ Fetch role / panel permissions
+    // panel = doctor / nurse / technician
     const roleDoc = await Role.findOne({ name: employee.panel });
-    const permissions = roleDoc ? roleDoc.permissions : {};
+    const permissions = roleDoc ? roleDoc.permissions : employee.permissions || {};
 
-    // Fetch department and ward
-    const department = employee.department || null;
-    const ward = employee.ward || null;
+    // 6️⃣ Update login status
+    await Employee.updateOne(
+      { _id: employee._id },
+      { isOnline: true, lastLogin: new Date() }
+    );
 
-    // Update online status
-    await Employee.updateOne({ _id: employee._id }, { isOnline: true, lastLogin: new Date() });
+    // 7️⃣ Token expiry logic
+    const expiresInSeconds = rememberMe
+      ? 60 * 60 * 24 * 30   // 30 days
+      : 60 * 60;           // 1 hour
 
-    // Prepare tokens
-    const { generateToken } = await import("../Utils/jwt.js");
-    const expiresIn = rememberMe ? 60 * 60 * 24 * 30 : 60 * 60; // 30d or 1h
-    const accessToken = generateToken({ id: employee._id, email, panel: employee.panel, organizationId: hospital._id }, expiresIn + "s");
-    const refreshToken = generateToken({ id: employee._id, type: "refresh" }, expiresIn * 2 + "s");
+    // 8️⃣ Generate tokens
+    const accessToken = generateToken(
+      {
+        id: employee._id,
+        email: employee.email,
+        role: employee.role,
+        panel: employee.panel,
+        hospitalId: hospital._id
+      },
+      `${expiresInSeconds}s`
+    );
 
-    // Build response
+    const refreshToken = generateToken(
+      {
+        id: employee._id,
+        type: "refresh"
+      },
+      `${expiresInSeconds * 2}s`
+    );
+
+    // 9️⃣ Final response
     return res.status(200).json({
       success: true,
       data: {
         accessToken,
         refreshToken,
-        expiresIn,
+        expiresIn: expiresInSeconds,
         user: {
           id: employee._id,
-          email: employee.email,
+          empId: employee.empId,
           name: employee.name,
-          role: employee.panel,
-          panel: "user",
-          organizationId: hospital._id,
-          organizationName: hospital.name,
-          department,
-          ward,
+          email: employee.email,
+          role: employee.role,      // authority (hod, cfo)
+          panel: employee.panel,    // profession (doctor, nurse)
+          department: employee.department || null,
+          ward: employee.ward || null,
           permissions
         },
-        organization: {
+        hospital: {
           id: hospital._id,
           name: hospital.name,
-          logo: hospital.logo || null,
-          timezone: hospital.timezone || "Asia/Kolkata",
-          currency: hospital.currency || "INR"
+          location: hospital.location,
+          contactEmail: hospital.contactEmail
         }
       }
     });
+
   } catch (error) {
     return res.status(500).json({
       success: false,
-      error: { code: "SERVER_ERROR", message: error.message, details: null }
+      error: {
+        code: "SERVER_ERROR",
+        message: error.message,
+        details: null
+      }
     });
+  }
+};
+
+
+// Superadmin login: lookup by username or email, validate password, set isOnline, create token
+export const superadminLogin = async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ message: "Password is required" });
+    }
+
+    // Allow login by username OR email
+    const admin = await Admin.findOne({
+      $or: [{ username }, { email }],
+      role: 'superadmin'
+    });
+
+    if (!admin) {
+      return res.status(401).json({ message: "Superadmin not found" });
+    }
+
+    // Verify password (Admin may not be hashed; check both ways)
+    const passwordMatch = password === admin.password || 
+      await bcrypt.compare(password, admin.password).catch(() => false);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ message: "Invalid password" });
+    }
+
+    // Generate JWT token with superadmin role
+    const token = generateToken(
+      { id: admin._id, username: admin.username, role: 'superadmin' },
+      '7d'
+    );
+
+    // Set HTTP-only cookie and return response
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'Lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+
+    return res.status(200).json({
+      message: "Superadmin login successful",
+      token,
+      user: {
+        id: admin._id,
+        username: admin.username,
+        email: admin.email,
+        role: 'superadmin',
+        panel: admin.panel,
+        organizationId: admin.organizationId
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
@@ -164,9 +264,10 @@ export const adminLogin = async (req, res) => {
       return res.status(400).json({ message: "Password is required" });
     }
 
-    // Allow login by username OR email
+    // Allow login by username OR email, but only for admin role
     const admin = await Admin.findOne({
-      $or: [{ username }, { email }]
+      $or: [{ username }, { email }],
+      role: 'admin'
     });
 
     if (!admin) {
@@ -181,20 +282,7 @@ export const adminLogin = async (req, res) => {
       return res.status(401).json({ message: "Invalid password" });
     }
 
-    // Mark user as online
-    admin.isOnline = true;
-    admin.lastLogin = new Date();
-    await admin.save();
-
-    // Log login activity
-    await LoginActivity.create({
-      userId: admin._id,
-      action: 'login',
-      ipAddress: req.ip || req.connection?.remoteAddress || '',
-      userAgent: req.get?.('user-agent') || ''
-    });
-
-    // Generate JWT token
+    // Generate JWT token with admin role
     const token = generateToken(
       { id: admin._id, username: admin.username, role: 'admin' },
       '7d'
@@ -215,11 +303,257 @@ export const adminLogin = async (req, res) => {
         id: admin._id,
         username: admin.username,
         email: admin.email,
-        role: 'admin'
+        role: 'admin',
+        panel: admin.panel,
+        organizationId: admin.organizationId
       }
     });
   } catch (error) {
     return res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Create Hospital Admin: Superadmin can create hospital admins with permissions
+export const createHospitalAdmin = async (req, res) => {
+  try {
+    const { 
+      username, 
+      email, 
+      password, 
+      panel, 
+      organizationId, 
+      hospitalId,
+      permissions,
+      name 
+    } = req.body;
+
+    // 1️⃣ Basic validation
+    if (!username || !email || !password || !organizationId || !hospitalId) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "MISSING_FIELDS",
+          message: "username, email, password, organizationId, and hospitalId are required",
+          details: null
+        }
+      });
+    }
+
+    // 2️⃣ Check if admin already exists
+    const existing = await Admin.findOne({
+      $or: [{ username }, { email }],
+      organizationId
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "ADMIN_EXISTS",
+          message: "Admin with this username or email already exists",
+          details: null
+        }
+      });
+    }
+
+    // 3️⃣ Verify hospital exists
+    const hospital = await Hospital.findById(hospitalId);
+    if (!hospital) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "HOSPITAL_NOT_FOUND",
+          message: "Hospital not found",
+          details: null
+        }
+      });
+    }
+
+    // 4️⃣ Hash password
+    const bcrypt = (await import("bcrypt")).default;
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 5️⃣ Create hospital admin
+    const admin = await Admin.create({
+      username,
+      email,
+      password: hashedPassword,
+      role: 'admin',
+      panel: panel || 'admin',
+      organizationId,
+      hospitalId,
+      permissions: permissions || {},
+      name: name || username,
+      isOnline: false,
+      lastLogin: null,
+      lastLogout: null
+    });
+
+    // 6️⃣ Return success response
+    return res.status(201).json({
+      success: true,
+      message: "Hospital admin created successfully",
+      data: {
+        admin: {
+          id: admin._id,
+          username: admin.username,
+          email: admin.email,
+          role: admin.role,
+          panel: admin.panel,
+          organizationId: admin.organizationId,
+          hospitalId: admin.hospitalId,
+          permissions: admin.permissions,
+          name: admin.name
+        },
+        hospital: {
+          id: hospital._id,
+          name: hospital.name,
+          location: hospital.location,
+          contactEmail: hospital.contactEmail
+        }
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: "SERVER_ERROR",
+        message: error.message,
+        details: null
+      }
+    });
+  }
+};
+
+// Hospital Admin login: authenticate by organizationId/email/password
+export const hospitalAdminLogin = async (req, res) => {
+  try {
+    const { organizationId, email, password, rememberMe } = req.body;
+
+    // 1️⃣ Basic validation
+    if (!organizationId || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "MISSING_FIELDS",
+          message: "organizationId, email, and password are required",
+          details: null
+        }
+      });
+    }
+
+    // 2️⃣ Find hospital admin
+    const admin = await Admin.findOne({
+      email,
+      organizationId,
+      role: 'admin',
+      hospitalId: { $exists: true } // Hospital admin must have hospitalId
+    });
+
+    if (!admin) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: "INVALID_CREDENTIALS",
+          message: "Invalid email or password",
+          details: null
+        }
+      });
+    }
+
+    // 3️⃣ Verify password
+    const passwordMatch = password === admin.password || 
+      await bcrypt.compare(password, admin.password).catch(() => false);
+
+    if (!passwordMatch) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: "INVALID_CREDENTIALS",
+          message: "Invalid email or password",
+          details: null
+        }
+      });
+    }
+
+    // 4️⃣ Get hospital details
+    const hospital = await Hospital.findById(admin.hospitalId);
+    if (!hospital) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: "INVALID_HOSPITAL",
+          message: "Hospital not found",
+          details: null
+        }
+      });
+    }
+
+    // 5️⃣ Update login status
+    await Admin.updateOne(
+      { _id: admin._id },
+      { isOnline: true, lastLogin: new Date() }
+    );
+
+    // 6️⃣ Token expiry logic
+    const expiresInSeconds = rememberMe
+      ? 60 * 60 * 24 * 30   // 30 days
+      : 60 * 60;           // 1 hour
+
+    // 7️⃣ Generate tokens
+    const accessToken = generateToken(
+      {
+        id: admin._id,
+        email: admin.email,
+        role: admin.role,
+        panel: admin.panel,
+        organizationId: admin.organizationId,
+        hospitalId: admin.hospitalId
+      },
+      `${expiresInSeconds}s`
+    );
+
+    const refreshToken = generateToken(
+      {
+        id: admin._id,
+        type: "refresh"
+      },
+      `${expiresInSeconds * 2}s`
+    );
+
+    // 8️⃣ Final response
+    return res.status(200).json({
+      success: true,
+      data: {
+        accessToken,
+        refreshToken,
+        expiresIn: expiresInSeconds,
+        user: {
+          id: admin._id,
+          username: admin.username,
+          email: admin.email,
+          role: admin.role,
+          panel: admin.panel,
+          organizationId: admin.organizationId,
+          hospitalId: admin.hospitalId
+        },
+        hospital: {
+          id: hospital._id,
+          name: hospital.name,
+          location: hospital.location,
+          contactEmail: hospital.contactEmail
+        }
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: {
+        code: "SERVER_ERROR",
+        message: error.message,
+        details: null
+      }
+    });
   }
 };
 

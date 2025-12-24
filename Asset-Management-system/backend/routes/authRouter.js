@@ -1,6 +1,9 @@
 import express from "express";
 import {
   adminLogin,
+  superadminLogin,
+  hospitalAdminLogin,
+  createHospitalAdmin,
   employeeLogin,
   getAuthStatus,
   logout,
@@ -15,14 +18,118 @@ import {
   forgotPassword,
   resetPassword,
 } from "../Controllers/tokenController.js"; // You can merge these into authController if preferred
-
+import { protect } from "../Middlewares/authMiddleware.js";
+import { authorizeRoles } from "../Middlewares/roleMiddleware.js";
 const authRouter = express.Router();
 /**
  * @swagger
  * /api/auth/admin/signup:
  *   post:
- *     summary: Admin signup
- *     tags: [Authentication]
+ *     summary: Register a new admin account
+ *     tags: [Admin]
+ *     description: Allows creation of a new admin user. The password will be securely hashed before saving to the database. The role will be set to 'admin' by default.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - email
+ *               - password
+ *               - panel
+ *               - organizationId
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 description: The admin's username
+ *                 example: adminuser
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: The admin's email address
+ *                 example: admin@gmail.com
+ *               password:
+ *                 type: string
+ *                 description: The admin's password (will be hashed)
+ *                 example: admin123
+ *               panel:
+ *                 type: string
+ *                 description: The admin's panel assignment
+ *                 example: superadmin
+ *               organizationId:
+ *                 type: string
+ *                 description: The organization ID for the admin (required for superadmin)
+ *                 example: org_123456789
+ *     responses:
+ *       201:
+ *         description: Admin created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Admin created successfully
+ *                 admin:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       description: Admin user ID
+ *                     username:
+ *                       type: string
+ *                       description: Admin username
+ *                     email:
+ *                       type: string
+ *                       description: Admin email
+ *                     role:
+ *                       type: string
+ *                       enum: ["admin", "superadmin"]
+ *                       description: Admin role (always set to 'admin' on creation)
+ *                       example: admin
+ *                     panel:
+ *                       type: string
+ *                       description: Admin panel assignment
+ *                       example: superadmin
+ *                     organizationId:
+ *                       type: string
+ *                       description: Organization ID
+ *                       example: org_123456789
+ *               example:
+ *                 message: Admin created successfully
+ *                 admin:
+ *                   id: 64f1a2b3c4d5e6f7g8h9i0j1
+ *                   username: adminuser
+ *                   email: admin@gmail.com
+ *                   role: admin
+ *                   panel: superadmin
+ *                   organizationId: org_123456789
+ *       400:
+ *         description: Bad request - missing required fields or admin already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Username, password, panel, and organizationId are required
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Server error
+ *                 error:
+ *                   type: string
+ *                   description: Detailed error message
  */
 authRouter.post("/admin/signup", adminSignup);
 
@@ -53,22 +160,196 @@ authRouter.post("/admin/signup", adminSignup);
  *             properties:
  *               email:
  *                 type: string
+ *                 format: email
+ *                 description: The admin's email address
  *                 example: admin@gmail.com
  *               password:
  *                 type: string
+ *                 description: The admin's password
  *                 example: admin123
  *     responses:
  *       200:
  *         description: Login successful
  *         content:
  *           application/json:
- *             example:
- *               message: Login successful
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Admin login successful
+ *                 token:
+ *                   type: string
+ *                   description: JWT authentication token
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       description: Admin user ID
+ *                     username:
+ *                       type: string
+ *                       description: Admin username
+ *                     email:
+ *                       type: string
+ *                       description: Admin email
+ *                     role:
+ *                       type: string
+ *                       example: admin
+ *                       description: User role
+ *               example:
+ *                 message: Admin login successful
+ *                 token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 user:
+ *                   id: 64f1a2b3c4d5e6f7g8h9i0j1
+ *                   username: adminuser
+ *                   email: admin@gmail.com
+ *                   role: admin
+ *       400:
+ *         description: Bad request - missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Email and password are required
  *       401:
- *         description: Invalid credentials
+ *         description: Invalid credentials - email not found or password incorrect
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Invalid credentials
  *       500:
  *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Server error
+ *                 error:
+ *                   type: string
+ *                   description: Detailed error message
  */
+/**
+ * @swagger
+ * /api/auth/superadmin/login:
+ *   post:
+ *     summary: Superadmin login
+ *     tags: [Superadmin]
+ *     description: Allows a superadmin to log in and receive a JWT token stored as an HTTP-only cookie. Superadmin can create organizations, hospitals, and manage admin permissions.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 description: The superadmin's username
+ *                 example: superadmin
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: The superadmin's email address
+ *                 example: superadmin@company.com
+ *               password:
+ *                 type: string
+ *                 description: The superadmin's password
+ *                 example: superadmin123
+ *     responses:
+ *       200:
+ *         description: Superadmin login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Superadmin login successful
+ *                 token:
+ *                   type: string
+ *                   description: JWT authentication token
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       description: Superadmin user ID
+ *                     username:
+ *                       type: string
+ *                       description: Superadmin username
+ *                     email:
+ *                       type: string
+ *                       description: Superadmin email
+ *                     role:
+ *                       type: string
+ *                       example: superadmin
+ *                       description: User role
+ *                     panel:
+ *                       type: string
+ *                       description: Superadmin panel assignment
+ *                     organizationId:
+ *                       type: string
+ *                       description: Organization ID
+ *               example:
+ *                 message: Superadmin login successful
+ *                 token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 user:
+ *                   id: 64f1a2b3c4d5e6f7g8h9i0j1
+ *                   username: superadmin
+ *                   email: superadmin@company.com
+ *                   role: superadmin
+ *                   panel: superadmin
+ *                   organizationId: org_123456789
+ *       400:
+ *         description: Bad request - missing password
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Password is required
+ *       401:
+ *         description: Invalid credentials - superadmin not found or password incorrect
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Superadmin not found
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Server error
+ *                 error:
+ *                   type: string
+ *                   description: Detailed error message
+ */
+authRouter.post("/superadmin/login", superadminLogin);
+
 authRouter.post("/admin/login", adminLogin);
 
 /**
@@ -106,6 +387,412 @@ authRouter.post("/employee/login", employeeLogin);
 
 /**
  * @swagger
+ * /api/auth/hospital-admin/login:
+ *   post:
+ *     summary: Hospital Admin login
+ *     tags: [Hospital Admin]
+ *     description: Authenticate a hospital admin using organizationId, email, and password. Returns JWT tokens and user details with hospital information.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - organizationId
+ *               - email
+ *               - password
+ *             properties:
+ *               organizationId:
+ *                 type: string
+ *                 description: The organization ID
+ *                 example: org_123456789
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: The hospital admin's email address
+ *                 example: admin@hospital.com
+ *               password:
+ *                 type: string
+ *                 description: The hospital admin's password
+ *                 example: password123
+ *               rememberMe:
+ *                 type: boolean
+ *                 description: Remember login for extended session
+ *                 example: false
+ *     responses:
+ *       200:
+ *         description: Hospital admin login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     accessToken:
+ *                       type: string
+ *                       description: JWT access token
+ *                     refreshToken:
+ *                       type: string
+ *                       description: JWT refresh token
+ *                     expiresIn:
+ *                       type: number
+ *                       description: Token expiration time in seconds
+ *                       example: 3600
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           description: Admin user ID
+ *                         username:
+ *                           type: string
+ *                           description: Admin username
+ *                         email:
+ *                           type: string
+ *                           description: Admin email
+ *                         role:
+ *                           type: string
+ *                           example: admin
+ *                           description: User role
+ *                         panel:
+ *                           type: string
+ *                           description: Admin panel assignment
+ *                         organizationId:
+ *                           type: string
+ *                           description: Organization ID
+ *                         hospitalId:
+ *                           type: string
+ *                           description: Hospital ID
+ *                     hospital:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           description: Hospital ID
+ *                         name:
+ *                           type: string
+ *                           description: Hospital name
+ *                         location:
+ *                           type: string
+ *                           description: Hospital location
+ *                         contactEmail:
+ *                           type: string
+ *                           description: Hospital contact email
+ *       400:
+ *         description: Bad request - missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: MISSING_FIELDS
+ *                     message:
+ *                       type: string
+ *                       example: organizationId, email, and password are required
+ *       401:
+ *         description: Invalid credentials - admin not found or password incorrect
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: INVALID_CREDENTIALS
+ *                     message:
+ *                       type: string
+ *                       example: Invalid email or password
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: SERVER_ERROR
+ *                     message:
+ *                       type: string
+ *                       description: Error message
+ */
+authRouter.post("/hospital-admin/login", hospitalAdminLogin);
+
+/**
+ * @swagger
+ * /api/auth/create-hospital-admin:
+ *   post:
+ *     summary: Create Hospital Admin
+ *     tags: [Superadmin]
+ *     description: Allows a superadmin to create a new hospital admin with specified permissions and hospital assignment.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: Authorization
+ *         description: Bearer token for authentication
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - email
+ *               - password
+ *               - organizationId
+ *               - hospitalId
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 description: The admin's username
+ *                 example: hospitaladmin
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: The admin's email address
+ *                 example: admin@hospital.com
+ *               password:
+ *                 type: string
+ *                 description: The admin's password (will be hashed)
+ *                 example: password123
+ *               panel:
+ *                 type: string
+ *                 description: The admin's panel assignment
+ *                 example: admin
+ *               organizationId:
+ *                 type: string
+ *                 description: The organization ID
+ *                 example: org_123456789
+ *               hospitalId:
+ *                 type: string
+ *                 description: The hospital ID where admin will be assigned
+ *                 example: 64f1a2b3c4d5e6f7g8h9i0j1
+ *               permissions:
+ *                 type: object
+ *                 description: The admin's permissions object
+ *                 example:
+ *                   assets: ["read", "write", "delete"]
+ *                   employees: ["read", "write"]
+ *               name:
+ *                 type: string
+ *                 description: The admin's display name
+ *                 example: John Doe
+ *     responses:
+ *       201:
+ *         description: Hospital admin created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Hospital admin created successfully
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     admin:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           description: Admin user ID
+ *                         username:
+ *                           type: string
+ *                           description: Admin username
+ *                         email:
+ *                           type: string
+ *                           description: Admin email
+ *                         role:
+ *                           type: string
+ *                           example: admin
+ *                           description: User role
+ *                         panel:
+ *                           type: string
+ *                           description: Admin panel assignment
+ *                         organizationId:
+ *                           type: string
+ *                           description: Organization ID
+ *                         hospitalId:
+ *                           type: string
+ *                           description: Hospital ID
+ *                         permissions:
+ *                           type: object
+ *                           description: Admin permissions
+ *                         name:
+ *                           type: string
+ *                           description: Admin display name
+ *                     hospital:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           description: Hospital ID
+ *                         name:
+ *                           type: string
+ *                           description: Hospital name
+ *                         location:
+ *                           type: string
+ *                           description: Hospital location
+ *                         contactEmail:
+ *                           type: string
+ *                           description: Hospital contact email
+ *               example:
+ *                 success: true
+ *                 message: Hospital admin created successfully
+ *                 data:
+ *                   admin:
+ *                     id: 64f1a2b3c4d5e6f7g8h9i0j1
+ *                     username: hospitaladmin
+ *                     email: admin@hospital.com
+ *                     role: admin
+ *                     panel: admin
+ *                     organizationId: org_123456789
+ *                     hospitalId: 64f1a2b3c4d5e6f7g8h9i0j1
+ *                     permissions:
+ *                       assets: ["read", "write", "delete"]
+ *                       employees: ["read", "write"]
+ *                     name: John Doe
+ *                   hospital:
+ *                     id: 64f1a2b3c4d5e6f7g8h9i0j1
+ *                     name: General Hospital
+ *                     location: New York, NY
+ *                     contactEmail: info@generalhospital.com
+ *       400:
+ *         description: Bad request - missing required fields or validation errors
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: MISSING_FIELDS
+ *                     message:
+ *                       type: string
+ *                       example: username, email, password, organizationId, and hospitalId are required
+ *       401:
+ *         description: Unauthorized - superadmin authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: UNAUTHORIZED
+ *                     message:
+ *                       type: string
+ *                       example: Superadmin access required
+ *       404:
+ *         description: Hospital not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: HOSPITAL_NOT_FOUND
+ *                     message:
+ *                       type: string
+ *                       example: Hospital not found
+ *       409:
+ *         description: Admin already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: ADMIN_EXISTS
+ *                     message:
+ *                       type: string
+ *                       example: Admin with this username or email already exists
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: SERVER_ERROR
+ *                     message:
+ *                       type: string
+ *                       description: Error message
+ */
+authRouter.post("/create-hospital-admin", protect, authorizeRoles('superadmin'), createHospitalAdmin);
+
+/**
+ * @swagger
  * /api/auth/me:
  *   get:
  *     summary: Get current authenticated user
@@ -122,7 +809,7 @@ authRouter.post("/employee/login", employeeLogin);
  *               user:
  *                 name: Admin User
  *                 email: admin@gmail.com
- *               role: admin
+ *                 role: admin
  *       401:
  *         description: Unauthorized
  *       500:

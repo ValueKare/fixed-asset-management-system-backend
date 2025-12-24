@@ -21,7 +21,7 @@ import uploadRouter from "./routes/uploadRouter.js";
 import hospitalRoutes from "./routes/hospitalRoutes.js";
 import barcodeRouter from "./routes/barcodeRouter.js";
 import entityRouter from "./routes/entityRouter.js";
-
+import userRouter from "./routes/userRouter.js"
 
 // Middleware
 import errorHandler from "./Middlewares/errorHandler.js";
@@ -43,7 +43,7 @@ app.use("/uploads", express.static("uploads"));
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "http://localhost:3000"],
     credentials: true,
   })
 );
@@ -60,6 +60,8 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Upload routes
 app.use("/api/upload/nbc", csvRouter);        // nbc_assets
+app.use(userRouter);
+app.use(entityRouter);
 app.use("/api/upload/hospital", hospitalUpload);   // hospital_assets
 app.use("/api/upload", uploadRouter); 
 // Other APIs
