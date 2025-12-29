@@ -10,10 +10,21 @@ const adminSchema = new mongoose.Schema({
     enum: ["admin", "superadmin"],
     default: "admin"
   },
+  roleId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Role",
+    required: true
+  },
+
+  // approvalScope: {
+  //   type: [String],
+  //   default: []
+  //   // e.g. ["asset_transfer", "scrap_approval", "audit_approval"]
+  // },
   panel: { type: String, required: true }, // e.g., superadmin, superduper admin, etc.
-  permissions: { 
-    type: mongoose.Schema.Types.Mixed, 
-    default: {} 
+  permissions: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
   }, // For granular permissions control
   createdAt: { type: Date, default: Date.now },
   isOnline: { type: Boolean, default: false },

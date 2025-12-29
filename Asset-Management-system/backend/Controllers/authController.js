@@ -217,7 +217,7 @@ export const superadminLogin = async (req, res) => {
     }
 
     // Verify password (Admin may not be hashed; check both ways)
-    const passwordMatch = password === admin.password || 
+    const passwordMatch = password === admin.password ||
       await bcrypt.compare(password, admin.password).catch(() => false);
 
     if (!passwordMatch) {
@@ -275,7 +275,7 @@ export const adminLogin = async (req, res) => {
     }
 
     // Verify password (Admin may not be hashed; check both ways)
-    const passwordMatch = password === admin.password || 
+    const passwordMatch = password === admin.password ||
       await bcrypt.compare(password, admin.password).catch(() => false);
 
     if (!passwordMatch) {
@@ -316,15 +316,15 @@ export const adminLogin = async (req, res) => {
 // Create Hospital Admin: Superadmin can create hospital admins with permissions
 export const createHospitalAdmin = async (req, res) => {
   try {
-    const { 
-      username, 
-      email, 
-      password, 
-      panel, 
-      organizationId, 
+    const {
+      username,
+      email,
+      password,
+      panel,
+      organizationId,
       hospitalId,
       permissions,
-      name 
+      name
     } = req.body;
 
     // 1️⃣ Basic validation
@@ -462,8 +462,8 @@ export const hospitalAdminLogin = async (req, res) => {
     }
 
     // 3️⃣ Verify password
-    const passwordMatch = password === admin.password || 
-      await bcrypt.compare(password, admin.password).catch(() => false);
+    const passwordMatch = await bcrypt.compare(password, admin.password);
+
 
     if (!passwordMatch) {
       return res.status(401).json({
@@ -503,15 +503,15 @@ export const hospitalAdminLogin = async (req, res) => {
     // 7️⃣ Generate tokens
     const accessToken = generateToken(
       {
-        id: admin._id,
-        email: admin.email,
-        role: admin.role,
-        panel: admin.panel,
+        sub: admin._id.toString(),      // subject (standard JWT claim)
+        roleId: admin.roleId,           // 🔑 RBAC anchor
+        userType: "admin",              // admin | employee | auditor
         organizationId: admin.organizationId,
-        hospitalId: admin.hospitalId
+        hospitalId: admin.hospitalId || null
       },
       `${expiresInSeconds}s`
     );
+
 
     const refreshToken = generateToken(
       {

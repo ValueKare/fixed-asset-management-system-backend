@@ -10,6 +10,7 @@ const employeeSchema = new mongoose.Schema(
       index: true,
     },
 
+
     empId: {
       type: String,
       required: true,
@@ -64,7 +65,11 @@ const employeeSchema = new mongoose.Schema(
       required: true,
       // examples: admin, hod, inventory, purchase, cfo
     },
-
+    roleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Role",
+      required: true
+    },
     panel: {
       type: String,
       required: true,

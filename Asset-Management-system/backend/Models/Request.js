@@ -35,7 +35,11 @@ const requestSchema = new Schema(
       ref: "Employee",
       required: true,
     },
-
+    requestType: {
+      type: String,
+      enum: ["asset_transfer", "procurement", "scrap", "scrap_reversal"],
+      required: true
+    },
     // Basic request details
     assetCategory: {
       type: String,
