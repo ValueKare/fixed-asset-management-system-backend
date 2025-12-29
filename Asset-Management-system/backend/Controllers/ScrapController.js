@@ -1,6 +1,6 @@
 // controllers/scrapController.js
-import ScrapRequest from "../models/ScrapRequest.js";
-import Asset from "../models/Asset.js";
+import ScrapRequest from "../Models/ScrapRequest.js";
+import Asset from "../Models/Asset.js";
 
 /**
  * 1. Create Scrap Request

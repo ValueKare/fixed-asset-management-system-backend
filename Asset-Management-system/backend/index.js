@@ -3,7 +3,10 @@ import cors from "cors";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
-                                                                                 
+          
+// app.js or server.js
+import ScrapRoutes from "./routes/ScrapRoutes.js";
+
 import connectDB from "./Config/dbConfig.js";
 import { pool } from "./Config/mysql.js";
 
@@ -75,6 +78,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/requests", requestRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/hospital", hospitalRoutes);
+app.use("/api/scrap", ScrapRoutes);
 
 // Error handler
 app.use(errorHandler);

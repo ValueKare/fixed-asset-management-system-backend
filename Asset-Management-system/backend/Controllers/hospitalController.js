@@ -1,4 +1,4 @@
-import Hospital from "../models/Hospital.js";
+import Hospital from "../Models/Hospital.js";
 
 export const createHospital = async (req, res) => {
   try {
