@@ -195,67 +195,279 @@ export const userLogin = async (req, res) => {
     });
   }
 };
+export const login = async (req, res) => {
+  try {
+    const { organizationId, email, password, rememberMe } = req.body;
+    console.log("LOGIN REQUEST BODY:", req.body);
+    if (!organizationId || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: { code: "MISSING_FIELDS", message: "Required fields missing" }
+      });
+    }
+
+    let user = null;
+    let userType = null;
+
+    // 1️⃣ Try SuperAdmin
+    user = await Admin.findOne({
+      email,
+      organizationId,
+      role: "superadmin"
+    }).populate("roleId");
+
+    if (user) {
+      userType = "admin";
+    }
+    console.log(user)
+
+    // 2️⃣ Try Hospital Admin
+    if (!user) {
+      user = await Admin.findOne({
+        email,
+        organizationId,
+        role: "admin",
+        hospitalId: { $exists: true }
+      }).populate("roleId");
+      
+      if (user) {
+        userType = "admin";
+      }
+    }
+    console.log(user)
+    // 3️⃣ Try Employee
+    if (!user) {
+      user = await Employee.findOne({
+        email,
+        organizationId,
+        status: "Active"
+      }).populate("roleId");
+
+      if (user) {
+        userType = "employee";
+      }
+    }
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { code: "INVALID_CREDENTIALS", message: "Invalid credentials" }
+      });
+    }
+
+    // 4️⃣ Verify password
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
+      return res.status(401).json({
+        success: false,
+        error: { code: "INVALID_CREDENTIALS", message: "Invalid credentials" }
+      });
+    }
+    // console.log(user);
+    const expiresInSeconds = rememberMe ? 60 * 60 * 24 * 30 : 60 * 60;
+
+    // 5️⃣ Generate token (same for everyone)
+    const accessToken = generateToken(
+      {
+        sub: user._id.toString(),
+        roleId: user.roleId,
+        userType,
+        organizationId: user.organizationId,
+        hospitalId: user.hospitalId || null
+      },
+      `${expiresInSeconds}s`
+    );
+
+    // 6️⃣ Response (frontend needs)
+    return res.status(200).json({
+      success: true,
+      data: {
+        accessToken,
+        expiresIn: expiresInSeconds,
+        user: {
+          id: user._id,
+          email: user.email,
+          role: user.roleId.name,     // UI label
+          panel: user.panel || null,
+          organizationId: user.organizationId,
+          hospitalId: user.hospitalId || null
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error("LOGIN ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: error.message }
+    });
+  }
+};
 
 
 // Superadmin login: lookup by username or email, validate password, set isOnline, create token
+// export const superadminLogin = async (req, res) => {
+//   try {
+//     const { username, email, password } = req.body;
+
+//     if (!password) {
+//       return res.status(400).json({ message: "Password is required" });
+//     }
+
+//     // Allow login by username OR email
+//     const admin = await Admin.findOne({
+//       $or: [{ username }, { email }],
+//       role: 'superadmin'
+//     });
+
+//     if (!admin) {
+//       return res.status(401).json({ message: "Superadmin not found" });
+//     }
+
+//     // Verify password (Admin may not be hashed; check both ways)
+//     const passwordMatch = password === admin.password ||
+//       await bcrypt.compare(password, admin.password).catch(() => false);
+
+//     if (!passwordMatch) {
+//       return res.status(401).json({ message: "Invalid password" });
+//     }
+
+//     // Generate JWT token with superadmin role
+//     const token = generateToken(
+//       { id: admin._id, username: admin.username, role: 'superadmin' },
+//       '7d'
+//     );
+
+//     // Set HTTP-only cookie and return response
+//     res.cookie('token', token, {
+//       httpOnly: true,
+//       secure: process.env.NODE_ENV === 'production',
+//       sameSite: 'Lax',
+//       maxAge: 7 * 24 * 60 * 60 * 1000
+//     });
+
+//     return res.status(200).json({
+//       message: "Superadmin login successful",
+//       token,
+//       user: {
+//         id: admin._id,
+//         username: admin.username,
+//         email: admin.email,
+//         role: 'superadmin',
+//         panel: admin.panel,
+//         organizationId: admin.organizationId
+//       }
+//     });
+//   } catch (error) {
+//     return res.status(500).json({ message: "Server error", error: error.message });
+//   }
+// };
 export const superadminLogin = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { organizationId, email, password, rememberMe } = req.body;
 
-    if (!password) {
-      return res.status(400).json({ message: "Password is required" });
+    // 1️⃣ Validate request (same contract as others)
+    if (!organizationId || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "MISSING_FIELDS",
+          message: "organizationId, email, and password are required"
+        }
+      });
     }
 
-    // Allow login by username OR email
+    // 2️⃣ Enforce SuperAdmin organization
+    if (organizationId !== process.env.AUDIT_COMPANY_ORG_ID) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: "INVALID_ORGANIZATION",
+          message: "SuperAdmin must log in under platform organization"
+        }
+      });
+    }
+
+    // 3️⃣ Find superadmin
     const admin = await Admin.findOne({
-      $or: [{ username }, { email }],
-      role: 'superadmin'
-    });
+      email,
+      organizationId,
+      role: "superadmin"
+    }).populate("roleId");
 
     if (!admin) {
-      return res.status(401).json({ message: "Superadmin not found" });
+      return res.status(401).json({
+        success: false,
+        error: { code: "INVALID_CREDENTIALS", message: "Invalid credentials" }
+      });
     }
 
-    // Verify password (Admin may not be hashed; check both ways)
-    const passwordMatch = password === admin.password ||
-      await bcrypt.compare(password, admin.password).catch(() => false);
-
+    // 4️⃣ Verify password (bcrypt only)
+    const passwordMatch = await bcrypt.compare(password, admin.password);
     if (!passwordMatch) {
-      return res.status(401).json({ message: "Invalid password" });
+      return res.status(401).json({
+        success: false,
+        error: { code: "INVALID_CREDENTIALS", message: "Invalid credentials" }
+      });
     }
 
-    // Generate JWT token with superadmin role
-    const token = generateToken(
-      { id: admin._id, username: admin.username, role: 'superadmin' },
-      '7d'
+    // 5️⃣ Token expiry
+    const expiresInSeconds = rememberMe
+      ? 60 * 60 * 24 * 30
+      : 60 * 60;
+
+    // 6️⃣ Generate RBAC-safe JWT
+    const accessToken = generateToken(
+      {
+        sub: admin._id.toString(),
+        roleId: admin.roleId,
+        userType: "admin",
+        organizationId: admin.organizationId,
+        hospitalId: null
+      },
+      `${expiresInSeconds}s`
     );
 
-    // Set HTTP-only cookie and return response
-    res.cookie('token', token, {
+    const refreshToken = generateToken(
+      { sub: admin._id.toString(), type: "refresh" },
+      `${expiresInSeconds * 2}s`
+    );
+
+    // 7️⃣ Optional cookie
+    res.cookie("token", accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Lax",
+      maxAge: expiresInSeconds * 1000
     });
 
+    // 8️⃣ Frontend response (UI needs)
     return res.status(200).json({
-      message: "Superadmin login successful",
-      token,
-      user: {
-        id: admin._id,
-        username: admin.username,
-        email: admin.email,
-        role: 'superadmin',
-        panel: admin.panel,
-        organizationId: admin.organizationId
+      success: true,
+      data: {
+        accessToken,
+        refreshToken,
+        expiresIn: expiresInSeconds,
+        user: {
+          id: admin._id,
+          username: admin.username,
+          email: admin.email,
+          role: "superadmin",          // UI label
+          panel: admin.panel,          // UI routing
+          organizationId: admin.organizationId
+        }
       }
     });
   } catch (error) {
-    return res.status(500).json({ message: "Server error", error: error.message });
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: error.message }
+    });
   }
 };
 
 // Admin login: lookup by username or email, validate password, set isOnline, create token
+// We have seperate login for superadmins and admins
 export const adminLogin = async (req, res) => {
   try {
     const { username, email, password } = req.body;

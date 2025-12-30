@@ -11,7 +11,8 @@ import {
   getOnlineStatus,      // NEW
   getOnlineUsers,
   adminSignup,
-  userLogin
+  userLogin,
+  login
 } from "../Controllers/authController.js";
 import {
   refreshAccessToken,
@@ -543,6 +544,188 @@ authRouter.post("/employee/login", employeeLogin);
  *                       description: Error message
  */
 authRouter.post("/hospital-admin/login", hospitalAdminLogin);
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Unified user login
+ *     tags: [Authentication]
+ *     description: >
+ *       Authenticates any user of the Fixed Asset Management system using a unified login flow.
+ *       This endpoint supports SuperAdmin, Hospital Admin, Employee, and Auditor logins.
+ *       The client does not specify the role; the system resolves the user identity and role
+ *       server-side based on stored credentials and role assignments.
+ *
+ *       Authorization is enforced using roleId and permission middleware.
+ *       Role values returned in the response are for UI purposes only.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - organizationId
+ *               - email
+ *               - password
+ *             properties:
+ *               organizationId:
+ *                 type: string
+ *                 description: >
+ *                   Organization identifier. For SuperAdmins, this must be the platform
+ *                   (auditing company) organizationId. For other users, this must be the
+ *                   subscribed client organizationId.
+ *                 example: ORG_001
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User email address
+ *                 example: user@organization.com
+ *               password:
+ *                 type: string
+ *                 description: User account password
+ *                 example: StrongPassword@123
+ *               rememberMe:
+ *                 type: boolean
+ *                 description: Remember login for extended session duration
+ *                 example: true
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     accessToken:
+ *                       type: string
+ *                       description: JWT access token
+ *                     refreshToken:
+ *                       type: string
+ *                       description: JWT refresh token
+ *                     expiresIn:
+ *                       type: number
+ *                       description: Token expiration time in seconds
+ *                       example: 3600
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           description: User unique identifier
+ *                         username:
+ *                           type: string
+ *                           nullable: true
+ *                           description: Username (admins only)
+ *                         name:
+ *                           type: string
+ *                           nullable: true
+ *                           description: Full name (employees/auditors)
+ *                         email:
+ *                           type: string
+ *                           description: User email address
+ *                         role:
+ *                           type: string
+ *                           example: superadmin
+ *                           description: >
+ *                             Role label for UI display only.
+ *                             Not used for authorization.
+ *                         panel:
+ *                           type: string
+ *                           nullable: true
+ *                           description: UI routing panel (platform, hospital, employee)
+ *                         organizationId:
+ *                           type: string
+ *                           description: Organization ID associated with the user
+ *                         hospitalId:
+ *                           type: string
+ *                           nullable: true
+ *                           description: Hospital ID if user belongs to a hospital
+ *       400:
+ *         description: Bad request - missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: MISSING_FIELDS
+ *                     message:
+ *                       type: string
+ *                       example: organizationId, email, and password are required
+ *       401:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: INVALID_CREDENTIALS
+ *                     message:
+ *                       type: string
+ *                       example: Invalid email or password
+ *       403:
+ *         description: Invalid organization for the given user
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: INVALID_ORGANIZATION
+ *                     message:
+ *                       type: string
+ *                       example: User is not allowed to log in under this organization
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: SERVER_ERROR
+ *                     message:
+ *                       type: string
+ *                       description: Error message
+ */
+
+authRouter.post("/login",login);
 
 /**
  * @swagger
