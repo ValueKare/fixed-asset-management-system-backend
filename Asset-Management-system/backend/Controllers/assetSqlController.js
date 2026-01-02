@@ -25,7 +25,7 @@ export const addAsset = async (req, res) => {
     } = req.body;
 
     const query = `
-      INSERT INTO assets 
+      INSERT INTO nbc_assets 
       (class, bus_A, cost_centre, sno, asset, asset_description, quantity, amount, dc_start, depky, use_percentage, CostOrder, planned_dep, CoCd, description, business_area)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
@@ -65,7 +65,7 @@ export const addAsset = async (req, res) => {
 // ------------------------------------
 export const allAssets = async (req, res) => {
   try {
-    const [rows] = await db.query("SELECT * FROM assets ORDER BY id DESC");
+    const [rows] = await db.query("SELECT * FROM nbc_assets ORDER BY id DESC");
     res.status(200).json({ total: rows.length, data: rows });
   } catch (err) {
     console.error("Fetch Asset Error:", err);

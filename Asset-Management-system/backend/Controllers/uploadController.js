@@ -92,7 +92,7 @@ export const uploadUniversal = async (req, res) => {
 
     let inserted = 0, errs = [];
 //normalized.length
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 5; i++) {
       const r = normalized[i];
       if (!r.asset) continue;
 
@@ -111,10 +111,10 @@ export const uploadUniversal = async (req, res) => {
           [r.class||null, r.busa||null, r.cost_ctr||null, r.s_no||null, r.asset||null, r.asset_description||null, r.asset_main_no_text||null, r.quantity||null, r.amount||null, r.dcstart||null, r.dep||null, r.use||null, r.cost_order||null, r.plnd_o_dep||null, r.cocd||null, r.description||null, r.business_area||null, barcode, key]
         );
         
-        // await pool.query(
-        //   `INSERT INTO hospital_assets (sr_no, aster_tag_number, vk_new_tag_number, make, model, block, wing, floor, location, aster_info_not_in_far, vk_remarks, fa_reco_resolution, aster_spoc_remarks, audit_date, asset_key, asset) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        //   [r.sr_no||null, r.aster_tag_number||null, r.vk_new_tag_number||null, r.make||null, r.model||null, r.block||null, r.wing||null, r.floor||null, r.location||null, r.aster_info_not_in_far||null, r.vk_remarks||null, r.fa_reco_resolution||null, r.aster_spoc_remarks||null, r.audit_date||null, key, r.asset||null]
-        // );
+        await pool.query(
+          `INSERT INTO hospital_assets (sr_no, aster_tag_number, vk_new_tag_number, make, model, block, wing, floor, location, aster_info_not_in_far, vk_remarks, fa_reco_resolution, aster_spoc_remarks, audit_date, asset_key, asset) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [r.sr_no||null, r.aster_tag_number||null, r.vk_new_tag_number||null, r.make||null, r.model||null, r.block||null, r.wing||null, r.floor||null, r.location||null, r.aster_info_not_in_far||null, r.vk_remarks||null, r.fa_reco_resolution||null, r.aster_spoc_remarks||null, r.audit_date||null, key, r.asset||null]
+        );
 
         inserted++;
       } catch (e) {

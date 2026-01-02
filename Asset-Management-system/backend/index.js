@@ -25,6 +25,7 @@ import hospitalRoutes from "./routes/hospitalRoutes.js";
 import barcodeRouter from "./routes/barcodeRouter.js";
 import entityRouter from "./routes/entityRouter.js";
 import userRouter from "./routes/userRouter.js"
+import roleRouter from "./routes/roleRouter.js"
 
 // Middleware
 import errorHandler from "./Middlewares/errorHandler.js";
@@ -46,7 +47,7 @@ app.use("/uploads", express.static("uploads"));
 
 app.use(
   cors({
-    origin: ["http://localhost:5173", "http://localhost:3000"],
+    origin: ["http://localhost:5173", "http://localhost:3000","http://localhost:3001"],
     credentials: true,
   })
 );
@@ -70,6 +71,7 @@ app.use("/api/upload", uploadRouter);
 // Other APIs
 app.use("/api/barcode", barcodeRouter);
 app.use("/api/entity", entityRouter);
+app.use("/api/roles", roleRouter);
 
 app.use("/api/admin", adminRouter);
 app.use("/api/sql/assets", assetSqlRouter);
@@ -87,7 +89,7 @@ app.use(errorHandler);
 connectDB();
 
 // Server
-app.listen(port, () => {
+app.listen(port, "0.0.0.0",() => {
   console.log(`Server running on port ${port}`);
 });
 
