@@ -2,7 +2,7 @@ import Role from "../Models/Role.js";
 
 export const getAllRoles = async (req, res) => {
   try {
-    const roles = await Role.find({}).select('name description roleType isSystemRole');
+    const roles = await Role.find({});
     
     res.status(200).json({
       success: true,

@@ -32,8 +32,12 @@ import errorHandler from "./Middlewares/errorHandler.js";
 
 // Swagger
 import { swaggerUi, swaggerSpec } from "./Config/swagger.js";
+// import express from "express";
+import initMySQLSchema from "./Config/mysqlSetup.js";
 
-dotenv.config();
+
+
+
 
 const app = express();
 const port = process.env.SERVER_PORT || process.env.PORT || 5001;
@@ -84,7 +88,16 @@ app.use("/api/scrap", ScrapRoutes);
 
 // Error handler
 app.use(errorHandler);
-
+(async () => {
+  try {
+    console.log("Database initializing");
+    await initMySQLSchema();
+    console.log("✅ Database schema initialized");
+  } catch (err) {
+    console.error("❌ Schema initialization failed", err);
+  }
+})();
+dotenv.config();
 // DB connections
 connectDB();
 
