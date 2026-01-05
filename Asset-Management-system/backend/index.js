@@ -26,6 +26,9 @@ import barcodeRouter from "./routes/barcodeRouter.js";
 import entityRouter from "./routes/entityRouter.js";
 import userRouter from "./routes/userRouter.js"
 import roleRouter from "./routes/roleRouter.js"
+import dashboardRoutes from "./Routes/dashboardRoutes.js";
+
+
 
 // Middleware
 import errorHandler from "./Middlewares/errorHandler.js";
@@ -85,6 +88,7 @@ app.use("/api/requests", requestRouter);
 app.use("/api/reports", reportRouter);
 app.use("/api/hospital", hospitalRoutes);
 app.use("/api/scrap", ScrapRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 // Error handler
 app.use(errorHandler);
