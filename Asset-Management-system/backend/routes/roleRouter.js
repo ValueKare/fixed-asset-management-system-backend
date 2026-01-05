@@ -21,6 +21,14 @@ const roleRouter = express.Router();
  *     description: Fetches all available roles in the system
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: Authorization
+ *         description: Bearer token for authentication
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
  *     responses:
  *       200:
  *         description: Successfully fetched all roles
@@ -31,6 +39,7 @@ const roleRouter = express.Router();
  *               properties:
  *                 success:
  *                   type: boolean
+ *                   example: true
  *                 data:
  *                   type: array
  *                   items:
@@ -38,21 +47,27 @@ const roleRouter = express.Router();
  *                     properties:
  *                       _id:
  *                         type: string
+ *                         example: 65a123abc456def789012345
  *                       name:
  *                         type: string
+ *                         example: admin
  *                       description:
  *                         type: string
+ *                         example: Hospital Administrator
  *                       roleType:
  *                         type: string
  *                         enum: [system, organization, audit, employee]
+ *                         example: organization
  *                       isSystemRole:
  *                         type: boolean
+ *                         example: false
  *       401:
- *         description: Unauthorized
+ *         description: Unauthorized – Missing or invalid Bearer token
  *       500:
  *         description: Internal server error
  */
 roleRouter.get("/", authMiddleware, getAllRoles);
+
 
 /**
  * @swagger
