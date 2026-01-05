@@ -6,7 +6,7 @@ export const generateBarcode = async (req, res) => {
   try {
     const assetId = req.params.assetId;
 
-    const [rows] = await db.query(`SELECT * FROM assets WHERE id = ?`, [assetId]);
+    const [rows] = await db.query(`SELECT * FROM nbc_assets WHERE id = ?`, [assetId]);
 
     if (rows.length === 0) {
       return res.status(404).json({ message: "Asset not found" });

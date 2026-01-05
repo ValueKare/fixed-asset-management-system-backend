@@ -3,8 +3,13 @@ import mongoose from "mongoose";
 const assetSchema = new mongoose.Schema({
   assetName: { type: String, required: true },
   assetCode: { type: String, unique: true },
-  cost: {type:String, required:true},
-  quantity: {type:String, required:true},
+  cost: { type: String, required: true },
+  assetKey: {
+    type: String,
+    required: true,
+    index: true
+  },
+  quantity: { type: String, required: true },
   category: { type: String },
   costCentre: { type: String },
   departmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Department" },
@@ -12,7 +17,7 @@ const assetSchema = new mongoose.Schema({
   building: String,
   floor: String,
   vendor: String,
-  
+
   status: {
     type: String,
     enum: ["active", "maintenance", "disposed"],
