@@ -92,7 +92,11 @@ export const uploadUniversal = async (req, res) => {
 
     let inserted = 0, errs = [];
 //normalized.length
+<<<<<<< Updated upstream
     for (let i = 0; i < 5; i++) {
+=======
+    for (let i = 0; i < normalized.length; i++) {
+>>>>>>> Stashed changes
       const r = normalized[i];
       if (!r.asset) continue;
 
