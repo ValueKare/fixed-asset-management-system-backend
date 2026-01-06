@@ -2,6 +2,12 @@ import mongoose from "mongoose";
 
 const hospitalSchema = new mongoose.Schema(
   {
+    hospitalId: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
     name: {
       type: String,
       required: true,

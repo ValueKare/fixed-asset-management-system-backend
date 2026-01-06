@@ -1,7 +1,8 @@
 import express from "express";
-import { createHospital, getHospitals } from "../Controllers/hospitalController.js";
-import { protect } from "../Middlewares/authMiddleware.js";
+import { createHospital, getHospitals ,updateHospital} from "../Controllers/hospitalController.js";
+import { authMiddleware, protect } from "../Middlewares/authMiddleware.js";
 import { authorizeRoles } from "../Middlewares/roleMiddleware.js";
+import requirePermission from "../Middlewares/PermissionMiddleware.js";
 
 const router = express.Router();
 
@@ -157,8 +158,8 @@ const router = express.Router();
  *                   type: string
  *                   example: Not authorized as superadmin
  */
-router.post("/", protect, authorizeRoles("superadmin"), createHospital);
-
+router.post("/", authMiddleware, requirePermission("user","assign_role"), createHospital);
+// roleRouter.post("/", authMiddleware, requirePermission("user", "assign_role"), createRole);
 /**
  * @swagger
  * /api/hospital:
@@ -204,7 +205,9 @@ router.post("/", protect, authorizeRoles("superadmin"), createHospital);
  *                   type: string
  *                   example: Not authorized as superadmin or auditmanager
  */
-router.get("/", protect, authorizeRoles("superadmin", "auditmanager"), getHospitals);
+router.get("/", authMiddleware, requirePermission("user","assign_role"),getHospitals);
+
+router.put("/:hospitalId", authMiddleware, requirePermission("user","assign_role"),updateHospital);
 
 export default router;
 

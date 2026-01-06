@@ -13,4 +13,4 @@ const assetUtilizationLogSchema = new mongoose.Schema({
 });
 
 
-export default mongoose.model("Building", buildingSchema);
+export default mongoose.model("assetutilisationschema", assetUtilizationLogSchema);
