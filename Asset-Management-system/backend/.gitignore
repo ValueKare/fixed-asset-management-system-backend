@@ -3,4 +3,7 @@ node_modules/
 
 # Environment variables
 .env
-.DS_Store
+node_modules/
+package-lock.json
+package.json
+
