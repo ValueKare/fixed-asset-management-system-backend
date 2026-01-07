@@ -21,8 +21,6 @@ export const addEmployee = async (req, res, next) => {
     }
 }
 
-
-
 export const getAllEmployees = async (req, res, next) => {
     try {
         const allEmployees = await Employee.find({},

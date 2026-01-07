@@ -50,7 +50,8 @@ export default async function initMySQLSchema() {
       wing VARCHAR(50),
       floor VARCHAR(50),
       location VARCHAR(255),
-
+      department VARCHAR(100),
+      building VARCHAR(100),
       aster_info_not_in_far TEXT,
       vk_remarks TEXT,
       fa_reco_resolution TEXT,

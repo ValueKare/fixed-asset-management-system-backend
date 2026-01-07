@@ -18,6 +18,7 @@ import { requireRole } from "../middlewares/roleMiddleware.js";
 
 const router = express.Router();
 
+
 /**
  * @swagger
  * /api/scrap:

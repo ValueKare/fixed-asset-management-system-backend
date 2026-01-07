@@ -193,6 +193,8 @@ router.post("/hospital-assets", upload.single("file"), async (req, res) => {
         model,
         block,
         wing,
+        departmanet,
+        building,
         floor,
         location,
         aster_info_not_in_far,

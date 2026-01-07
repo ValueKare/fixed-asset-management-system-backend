@@ -26,7 +26,7 @@ import barcodeRouter from "./routes/barcodeRouter.js";
 import entityRouter from "./routes/entityRouter.js";
 import userRouter from "./routes/userRouter.js"
 import roleRouter from "./routes/roleRouter.js"
-import dashboardRoutes from "./Routes/dashboardRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
 
 
 
@@ -72,7 +72,6 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // Upload routes
 app.use("/api/upload/nbc", csvRouter);        // nbc_assets
 app.use(userRouter);
-app.use(entityRouter);
 app.use("/api/upload/hospital", hospitalUpload);   // hospital_assets
 app.use("/api/upload", uploadRouter); 
 // Other APIs

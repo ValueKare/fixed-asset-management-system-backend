@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const assetSchema = new mongoose.Schema({
   assetName: { type: String, required: true },
   assetCode: { type: String, unique: true },
-  cost: { type: String, required: true },
+  purchaseCost: { type: Number, required: true },
   assetKey: {
     type: String,
     required: true,
@@ -50,7 +50,12 @@ const assetSchema = new mongoose.Schema({
 
   barcode: String,
   createdAt: { type: Date, default: Date.now },
+  maintenanceCost: { type: Number, default: 0 },
+  amcEndDate: Date,
 });
-
 const Asset = mongoose.models.Asset || mongoose.model("Asset", assetSchema);
+
+
+
+
 export default Asset;
