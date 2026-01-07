@@ -57,7 +57,7 @@ const roleSchema = new mongoose.Schema(
         approve: { type: Boolean, default: false },
       },
 
-      // ---- User & Role Management ----
+      // ---- User & Role Management ----  //schema of updating the true values
       user: {
         create: { type: Boolean, default: false },
         update: { type: Boolean, default: false },
