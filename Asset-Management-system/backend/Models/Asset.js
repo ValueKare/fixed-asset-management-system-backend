@@ -14,8 +14,14 @@ const assetSchema = new mongoose.Schema({
   costCentre: { type: String },
   departmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Department" },
   hospitalId: { type: mongoose.Schema.Types.ObjectId, ref: "Hospital" },
-  building: String,
-  floor: String,
+  buildingId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Building",
+  },
+  floorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Floor",
+  },
   vendor: String,
 
   status: {
