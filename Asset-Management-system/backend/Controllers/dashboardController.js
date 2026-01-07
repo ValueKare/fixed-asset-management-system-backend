@@ -1,5 +1,6 @@
 import Asset from "../Models/Asset.js";
 import mongoose from "mongoose";
+import { pool } from "../Config/mysql.js";
 
 const asObjectIdIfValid = (value) => {
   if (!value) return null;
@@ -7,18 +8,55 @@ const asObjectIdIfValid = (value) => {
   return null;
 };
 
+const safeNumber = (v, fallback = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const isNumericString = (v) => typeof v === "string" && /^\s*\d+(\.\d+)?\s*$/.test(v);
+
 /**
  * GET /api/dashboard/summary
  * Total assets, maintenance, AMC/CMC due, utilization %
  */
 export const getDashboardSummary = async (req, res) => {
   try {
+    const [mysqlCountRows] = await pool.query(
+      "SELECT COUNT(*) AS mysqlTotal FROM nbc_assets"
+    );
+    const mysqlTotal = safeNumber(mysqlCountRows?.[0]?.mysqlTotal, 0);
+
     const scope = {};
     const rawHospitalId = req.auth?.hospitalId || req.query?.hospitalId;
     const hospitalId = asObjectIdIfValid(rawHospitalId);
     if (hospitalId) scope.hospitalId = hospitalId;
 
     const totalAssets = await Asset.countDocuments(scope);
+
+    if (req.query?.debug === "1") {
+      return res.json({
+        debug: true,
+        mongoTotalScoped: totalAssets,
+        mysqlTotal
+      });
+    }
+
+    // Fallback to MySQL if Mongo has no matching assets but SQL has data
+    if (totalAssets === 0 && safeNumber(mysqlTotal, 0) > 0) {
+      const [avgUseRows] = await pool.query(
+        "SELECT AVG(CAST(use_percentage AS DECIMAL(10,2))) AS avgUse FROM nbc_assets WHERE use_percentage REGEXP '^[0-9]+(\\.[0-9]+)?$'"
+      );
+      const avgUse = avgUseRows?.[0]?.avgUse ?? 0;
+
+      return res.json({
+        totalAssets: safeNumber(mysqlTotal, 0),
+        activeAssets: safeNumber(mysqlTotal, 0),
+        underMaintenance: 0,
+        scrappedAssets: 0,
+        amcDue: 0,
+        utilizationRate: Math.round(safeNumber(avgUse, 0))
+      });
+    }
 
     const activeAssets = await Asset.countDocuments({
       ...scope,
@@ -74,6 +112,26 @@ export const getDashboardSummary = async (req, res) => {
  */
 export const assetsByDepartment = async (req, res) => {
   try {
+    const [mysqlCountRows] = await pool.query(
+      "SELECT COUNT(*) AS mysqlTotal FROM nbc_assets"
+    );
+    const mysqlTotal = safeNumber(mysqlCountRows?.[0]?.mysqlTotal, 0);
+
+    // Fallback to MySQL when Mongo has no assets
+    const mongoCount = await Asset.estimatedDocumentCount();
+    if (mongoCount === 0 && mysqlTotal > 0) {
+      const [rows] = await pool.query(
+        "SELECT business_area, COUNT(*) AS assetCount FROM nbc_assets GROUP BY business_area ORDER BY assetCount DESC"
+      );
+
+      const data = (rows || []).map((r) => ({
+        department: r.business_area || "Unassigned",
+        assetCount: safeNumber(r.assetCount, 0)
+      }));
+
+      return res.json(data);
+    }
+
     const rawHospitalId = req.auth?.hospitalId || req.query?.hospitalId;
     const hospitalId = asObjectIdIfValid(rawHospitalId);
     const matchStage = hospitalId ? [{ $match: { hospitalId } }] : [];
@@ -109,6 +167,19 @@ export const assetsByDepartment = async (req, res) => {
       }
     ]);
 
+    if ((data?.length || 0) === 0 && mysqlTotal > 0) {
+      const [rows] = await pool.query(
+        "SELECT business_area, COUNT(*) AS assetCount FROM nbc_assets GROUP BY business_area ORDER BY assetCount DESC"
+      );
+
+      const fallback = (rows || []).map((r) => ({
+        department: r.business_area || "Unassigned",
+        assetCount: safeNumber(r.assetCount, 0)
+      }));
+
+      return res.json(fallback);
+    }
+
     res.json(data);
   } catch (error) {
     res.status(500).json({ message: "Department data failed", error });
@@ -121,6 +192,38 @@ export const assetsByDepartment = async (req, res) => {
  */
 export const utilizationByDepartment = async (req, res) => {
   try {
+    const [mysqlCountRows] = await pool.query(
+      "SELECT COUNT(*) AS mysqlTotal FROM nbc_assets"
+    );
+    const mysqlTotal = safeNumber(mysqlCountRows?.[0]?.mysqlTotal, 0);
+
+    // Fallback to MySQL when Mongo has no assets
+    const mongoCount = await Asset.estimatedDocumentCount();
+    if (mongoCount === 0 && mysqlTotal > 0) {
+      const [rows] = await pool.query(
+        `
+        SELECT 
+          COALESCE(business_area, 'Unassigned') AS department,
+          ROUND(AVG(
+            CASE 
+              WHEN use_percentage REGEXP '^[0-9]+(\\.[0-9]+)?$' THEN CAST(use_percentage AS DECIMAL(10,2))
+              ELSE NULL
+            END
+          ), 0) AS utilization
+        FROM nbc_assets
+        GROUP BY business_area
+        ORDER BY utilization DESC
+        `
+      );
+
+      const data = (rows || []).map((r) => ({
+        department: r.department || "Unassigned",
+        utilization: safeNumber(r.utilization, 0)
+      }));
+
+      return res.json(data);
+    }
+
     const rawHospitalId = req.auth?.hospitalId || req.query?.hospitalId;
     const hospitalId = asObjectIdIfValid(rawHospitalId);
     const matchStage = hospitalId ? [{ $match: { hospitalId } }] : [];
@@ -170,6 +273,31 @@ export const utilizationByDepartment = async (req, res) => {
       }
     ]);
 
+    if ((data?.length || 0) === 0 && mysqlTotal > 0) {
+      const [rows] = await pool.query(
+        `
+        SELECT 
+          COALESCE(business_area, 'Unassigned') AS department,
+          ROUND(AVG(
+            CASE 
+              WHEN use_percentage REGEXP '^[0-9]+(\\.[0-9]+)?$' THEN CAST(use_percentage AS DECIMAL(10,2))
+              ELSE NULL
+            END
+          ), 0) AS utilization
+        FROM nbc_assets
+        GROUP BY business_area
+        ORDER BY utilization DESC
+        `
+      );
+
+      const fallback = (rows || []).map((r) => ({
+        department: r.department || "Unassigned",
+        utilization: safeNumber(r.utilization, 0)
+      }));
+
+      return res.json(fallback);
+    }
+
     res.json(data);
   } catch (error) {
     res.status(500).json({ message: "Utilization failed", error });
@@ -182,6 +310,34 @@ export const utilizationByDepartment = async (req, res) => {
  */
 export const costTrends = async (req, res) => {
   try {
+    const [mysqlCountRows] = await pool.query(
+      "SELECT COUNT(*) AS mysqlTotal FROM nbc_assets"
+    );
+    const mysqlTotal = safeNumber(mysqlCountRows?.[0]?.mysqlTotal, 0);
+
+    // Fallback to MySQL when Mongo has no assets
+    const mongoCount = await Asset.estimatedDocumentCount();
+    if (mongoCount === 0 && mysqlTotal > 0) {
+      const [rows] = await pool.query(
+        `
+        SELECT 
+          MONTH(createdAt) AS month,
+          SUM(COALESCE(amount, 0)) AS cost
+        FROM nbc_assets
+        GROUP BY MONTH(createdAt)
+        ORDER BY month ASC
+        `
+      );
+
+      const data = (rows || []).map((r) => ({
+        month: safeNumber(r.month, 0),
+        cost: safeNumber(r.cost, 0),
+        maintenance: 0
+      }));
+
+      return res.json(data);
+    }
+
     const rawHospitalId = req.auth?.hospitalId || req.query?.hospitalId;
     const hospitalId = asObjectIdIfValid(rawHospitalId);
     const matchStage = hospitalId ? [{ $match: { hospitalId } }] : [];
@@ -206,6 +362,27 @@ export const costTrends = async (req, res) => {
       }
     ]);
 
+    if ((data?.length || 0) === 0 && mysqlTotal > 0) {
+      const [rows] = await pool.query(
+        `
+        SELECT 
+          MONTH(createdAt) AS month,
+          SUM(COALESCE(amount, 0)) AS cost
+        FROM nbc_assets
+        GROUP BY MONTH(createdAt)
+        ORDER BY month ASC
+        `
+      );
+
+      const fallback = (rows || []).map((r) => ({
+        month: safeNumber(r.month, 0),
+        cost: safeNumber(r.cost, 0),
+        maintenance: 0
+      }));
+
+      return res.json(fallback);
+    }
+
     res.json(data);
   } catch (error) {
     res.status(500).json({ message: "Cost trends failed", error });
@@ -218,6 +395,27 @@ export const costTrends = async (req, res) => {
  */
 export const dashboardAlerts = async (req, res) => {
   try {
+    const [mysqlCountRows] = await pool.query(
+      "SELECT COUNT(*) AS mysqlTotal FROM nbc_assets"
+    );
+    const mysqlTotal = safeNumber(mysqlCountRows?.[0]?.mysqlTotal, 0);
+
+    // Fallback to MySQL when Mongo has no assets
+    const mongoCount = await Asset.estimatedDocumentCount();
+    if (mongoCount === 0 && mysqlTotal > 0) {
+      const [rows] = await pool.query(
+        "SELECT asset_description, business_area, createdAt FROM nbc_assets ORDER BY createdAt DESC LIMIT 5"
+      );
+
+      const alerts = (rows || []).map((r) => ({
+        assetName: r.asset_description || "Unknown",
+        department: r.business_area || "Unassigned",
+        createdAt: r.createdAt || null
+      }));
+
+      return res.json(alerts);
+    }
+
     const scope = {};
     const rawHospitalId = req.auth?.hospitalId || req.query?.hospitalId;
     const hospitalId = asObjectIdIfValid(rawHospitalId);
@@ -237,6 +435,20 @@ export const dashboardAlerts = async (req, res) => {
       .limit(5)
       .select("assetName departmentId amcEndDate utilizationStatus")
       .populate("departmentId", "name");
+
+    if ((alerts?.length || 0) === 0 && mysqlTotal > 0) {
+      const [rows] = await pool.query(
+        "SELECT asset_description, business_area, createdAt FROM nbc_assets ORDER BY createdAt DESC LIMIT 5"
+      );
+
+      const fallback = (rows || []).map((r) => ({
+        assetName: r.asset_description || "Unknown",
+        department: r.business_area || "Unassigned",
+        createdAt: r.createdAt || null
+      }));
+
+      return res.json(fallback);
+    }
 
     res.json(alerts);
   } catch (error) {
