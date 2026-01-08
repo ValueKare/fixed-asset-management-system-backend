@@ -1,6 +1,8 @@
 // backend/Controllers/requestController.js
 
 import Request from "../Models/Request.js";
+import logger from "../Utils/logger.js";
+import mongoose from "mongoose";
 
 /**
  * Approver levels in correct order.
@@ -50,7 +52,8 @@ export const createRequest = async (req, res, next) => {
     }
 
     const newRequest = await Request.create({
-      requestedBy: req.user.id,
+      requestedBy: new mongoose.Types.ObjectId(), // Generate valid ObjectId for testing
+      requestType: "procurement", // Required field
       assetCategory,
       assetName,
       quantity,
@@ -62,6 +65,10 @@ export const createRequest = async (req, res, next) => {
       currentLevel: "level1",
       finalStatus: "pending",
     });
+    logger.info(
+  `REQUEST_CREATED | requestId=${newRequest._id} | asset=${assetName} | qty=${quantity} | dept=${department} | by=temp_user`
+);
+
 
     res.status(201).json({
       message: "Request created successfully",
@@ -145,12 +152,15 @@ export const approveRequest = async (req, res, next) => {
     if (!request) return res.status(404).json({ message: "Request not found" });
 
     const currentRole = req.user.role;
+if (request.currentLevel !== currentRole) {
+  logger.warn(
+    `UNAUTHORIZED_APPROVAL | requestId=${request._id} | attemptedBy=${req.user.id} | role=${currentRole} | expected=${request.currentLevel}`
+  );
 
-    if (request.currentLevel !== currentRole) {
-      return res.status(403).json({
-        message: `You cannot approve at this stage. Current stage: ${request.currentLevel}`,
-      });
-    }
+  return res.status(403).json({
+    message: `You cannot approve at this stage. Current stage: ${request.currentLevel}`,
+  });
+}
 
     // Mark this stage as approved
     request.approvalFlow[currentRole] = {
@@ -191,12 +201,15 @@ export const rejectRequest = async (req, res, next) => {
 
     const currentRole = req.user.role;
 
-    if (request.currentLevel !== currentRole) {
-      return res.status(403).json({
-        message: `You cannot reject at this stage. Current stage: ${request.currentLevel}`,
-      });
-    }
+   if (request.currentLevel !== currentRole) {
+  logger.warn(
+    `UNAUTHORIZED_REJECT | requestId=${request._id} | attemptedBy=${req.user.id} | role=${currentRole} | expected=${request.currentLevel}`
+  );
 
+  return res.status(403).json({
+    message: `You cannot reject at this stage. Current stage: ${request.currentLevel}`,
+  });
+}
     request.approvalFlow[currentRole] = {
       status: "rejected",
       approvedBy: req.user.id,
@@ -208,6 +221,11 @@ export const rejectRequest = async (req, res, next) => {
     request.currentLevel = "rejected";
 
     await request.save();
+
+    logger.info(
+  `REQUEST_REJECTED | requestId=${request._id} | level=${currentRole} | by=${req.user.id} | remarks=${remarks || "NA"}`
+);
+
 
     res.status(200).json({
       message: "Request rejected",

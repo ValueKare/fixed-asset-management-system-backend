@@ -1,0 +1,13 @@
+{
+  "assetCategory": "IT",
+  "assetName": "Laptop",
+  "quantity": 5,
+  "department": "IT",
+  "priority": "high",
+  "justification": "New employees onboarding",
+  "estimatedCost": 250000,
+  "meta": {
+    "brandPreference": "Dell",
+    "deliveryUrgency": "within 7 days"
+  }
+}

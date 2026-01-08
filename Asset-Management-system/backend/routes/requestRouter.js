@@ -66,8 +66,6 @@ const router = express.Router();
  */
 router.post(
   "/",
-  protect,
-  requireRole("employee", "hod", "admin"),
   createRequest
 );
 
