@@ -9,6 +9,7 @@ import ScrapRoutes from "./routes/ScrapRoutes.js";
 
 import connectDB from "./Config/dbConfig.js";
 import { pool } from "./Config/mysql.js";
+import { initMongoCollections } from "./Config/mongoSetup.js";
 
 // Routers
 import csvRouter from "./routes/nbcUpload.js";
@@ -103,6 +104,7 @@ app.use(errorHandler);
 dotenv.config();
 // DB connections
 connectDB();
+initMongoCollections();
 
 // Server
 app.listen(port, "0.0.0.0",() => {
