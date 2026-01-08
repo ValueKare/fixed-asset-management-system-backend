@@ -18,4 +18,4 @@ const maintenanceContractSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 
-export default mongoose.model('LoginActivity', loginActivitySchema);
+export default mongoose.model('MaintenanceContract',maintenanceContractSchema );
