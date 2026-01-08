@@ -151,7 +151,8 @@ import {
   addAsset,
   allAssets,
   updateAsset,
-  deleteAsset
+  deleteAsset,
+  getPaginatedAssets
 } from "../Controllers/assetSqlController.js";
 
 const router = express.Router();
@@ -161,6 +162,7 @@ const router = express.Router();
 // Routes
 router.post("/add", addAsset);
 router.get("/all", allAssets);
+router.get("/paginated", getPaginatedAssets);
 router.put("/update/:id", updateAsset);
 router.delete("/delete/:id", deleteAsset);
 

@@ -1,6 +1,9 @@
 import express from "express";
 import multer from "multer";
 import { uploadUniversal } from "../Controllers/uploadController.js";
+import { authMiddleware, protect } from "../Middlewares/authMiddleware.js";
+import { authorizeRoles } from "../Middlewares/roleMiddleware.js";
+import requirePermission from "../Middlewares/PermissionMiddleware.js";
 const router = express.Router();
 
 // Multer config for file uploading
@@ -38,7 +41,14 @@ const upload = multer({
 
 
 
-router.post("/universal", upload.single("file"), uploadUniversal);
+router.post(
+  "/universal",
+  authMiddleware,
+  requirePermission("asset", "create"),
+  upload.single("file"),
+  uploadUniversal
+);
+
 // quick health-check for the upload router
 router.get("/ping", (req, res) => res.json({ ok: true, route: "/api/upload/ping" }));
 export default router;

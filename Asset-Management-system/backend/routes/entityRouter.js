@@ -360,7 +360,9 @@ import {
   updateEntity,
   deleteEntity,
 } from "../Controllers/entityController.js";
-
+import { authMiddleware, protect } from "../Middlewares/authMiddleware.js";
+import { authorizeRoles } from "../Middlewares/roleMiddleware.js";
+import requirePermission from "../Middlewares/PermissionMiddleware.js";
 const router = express.Router();
 
 /**
@@ -400,7 +402,8 @@ const router = express.Router();
  *       201:
  *         description: Entity created
  */
-router.post("/", createEntity);
+router.post("/",authMiddleware,
+  requirePermission("user", "create"), createEntity);
 
 /**
  * @swagger

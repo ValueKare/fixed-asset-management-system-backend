@@ -392,68 +392,107 @@ export const getHospitalsByEntity = async (req, res) => {
     });
   }
 };
+
+/**
+ * GET /api/dashboard/alerts
+ * Get alerts with comprehensive asset information
+ */
 export const dashboardAlerts = async (req, res) => {
   try {
-    const [mysqlCountRows] = await pool.query(
-      "SELECT COUNT(*) AS mysqlTotal FROM nbc_assets"
-    );
-    const mysqlTotal = safeNumber(mysqlCountRows?.[0]?.mysqlTotal, 0);
+    // 1. Resolve hospital scope
+    const rawHospitalId = req.auth?.hospitalId || req.query?.hospitalId;
+    const hospitalId = await getHospitalIdFromCode(rawHospitalId);
 
-    // Fallback to MySQL when Mongo has no assets
-    const mongoCount = await Asset.estimatedDocumentCount();
-    if (mongoCount === 0 && mysqlTotal > 0) {
-      const [rows] = await pool.query(
-        "SELECT asset_description, business_area, createdAt FROM nbc_assets ORDER BY createdAt DESC LIMIT 5"
-      );
-
-      const alerts = (rows || []).map((r) => ({
-        assetName: r.asset_description || "Unknown",
-        department: r.business_area || "Unassigned",
-        createdAt: r.createdAt || null
-      }));
-
-      return res.json(alerts);
+    // 2. Build MongoDB scope
+    const scope = {};
+    if (hospitalId) {
+      scope.hospitalId = hospitalId;
     }
 
-    const scope = {};
-    const rawHospitalId = req.auth?.hospitalId || req.query?.hospitalId;
-    const hospitalId = asObjectIdIfValid(rawHospitalId);
-    if (hospitalId) scope.hospitalId = hospitalId;
+    // 3. Time window for AMC alerts (30 days)
+    const today = new Date();
+    const amcThresholdDate = new Date(
+      Date.now() + 30 * 24 * 60 * 60 * 1000
+    );
 
+    // 4. Fetch alert-worthy assets
     const alerts = await Asset.find({
       ...scope,
       $or: [
-        {
-          amcEndDate: {
-            $lte: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
-          }
-        },
+        { amcEndDate: { $lte: amcThresholdDate } },
         { utilizationStatus: "under_maintenance" }
       ]
     })
+      .sort({ amcEndDate: 1 }) // nearest expiry first
       .limit(5)
-      .select("assetName departmentId amcEndDate utilizationStatus")
-      .populate("departmentId", "name");
+      .select(
+        "assetName assetCode hospitalId departmentId buildingId floorId amcEndDate utilizationStatus status purchaseCost maintenanceCost"
+      )
+      .populate([
+        { path: "hospitalId", select: "name location" },
+        { path: "departmentId", select: "name" },
+        { path: "buildingId", select: "name" },
+        { path: "floorId", select: "name" }
+      ]);
 
-    if ((alerts?.length || 0) === 0 && mysqlTotal > 0) {
-      const [rows] = await pool.query(
-        "SELECT asset_description, business_area, createdAt FROM nbc_assets ORDER BY createdAt DESC LIMIT 5"
-      );
+    // 5. Format alerts correctly
+    const formattedAlerts = alerts.map(asset => {
+      const isAmcDue =
+        asset.amcEndDate && asset.amcEndDate <= amcThresholdDate;
 
-      const fallback = (rows || []).map((r) => ({
-        assetName: r.asset_description || "Unknown",
-        department: r.business_area || "Unassigned",
-        createdAt: r.createdAt || null
-      }));
+      const daysToExpiry = asset.amcEndDate
+        ? Math.max(
+            0,
+            Math.ceil(
+              (new Date(asset.amcEndDate) - today) /
+                (1000 * 60 * 60 * 24)
+            )
+          )
+        : null;
 
-      return res.json(fallback);
-    }
+      return {
+        assetName: asset.assetName || "Unknown",
+        assetCode: asset.assetCode || "N/A",
 
-    res.json(alerts);
+        hospitalName: asset.hospitalId?.name || "Unknown Hospital",
+        hospitalLocation:
+          asset.hospitalId?.location || "Unknown Location",
+
+        departmentName:
+          asset.departmentId?.name || "Unassigned",
+        buildingName: asset.buildingId?.name || "N/A",
+        floorName: asset.floorId?.name || "N/A",
+
+        amcExpiryDate: asset.amcEndDate || null,
+        utilizationStatus:
+          asset.utilizationStatus || "unknown",
+        status: asset.status || "unknown",
+
+        purchaseCost: asset.purchaseCost || 0,
+        maintenanceCost: asset.maintenanceCost || 0,
+
+        alertType: isAmcDue
+          ? "AMC Due"
+          : "Under Maintenance",
+
+        daysToExpiry
+      };
+    });
+
+    // 6. Send response
+    res.json({
+      success: true,
+      count: formattedAlerts.length,
+      scope: hospitalId ? "hospital" : "global",
+      alerts: formattedAlerts
+    });
   } catch (error) {
-    res.status(500).json({ message: "Alerts fetch failed", error });
+    console.error("Dashboard alerts error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Alerts fetch failed",
+      error: error.message
+    });
   }
 };
-
-
 

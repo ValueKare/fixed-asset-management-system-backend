@@ -122,3 +122,76 @@ export const deleteAsset = async (req, res) => {
 };
 
 
+// ------------------------------------
+// Get Paginated Assets (SELECT with pagination)
+// ------------------------------------
+export const getPaginatedAssets = async (req, res) => {
+  try {
+    // Extract query parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const status = req.query.status || '';
+    
+    // Calculate offset
+    const offset = (page - 1) * limit;
+    
+    // Build WHERE clause
+    let whereClause = "WHERE 1=1";
+    const params = [];
+    
+    if (search) {
+      whereClause += " AND (asset_description LIKE ? OR asset LIKE ? OR sno LIKE ?)";
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    
+    if (status) {
+      whereClause += " AND status = ?";
+      params.push(status);
+    }
+    
+    // Get total count for pagination info
+    const countQuery = `SELECT COUNT(*) as total FROM nbc_assets ${whereClause}`;
+    const [countResult] = await db.query(countQuery, params);
+    const total = countResult[0].total;
+    
+    // Get paginated data
+    const dataQuery = `
+      SELECT * FROM nbc_assets 
+      ${whereClause} 
+      ORDER BY id DESC 
+      LIMIT ? OFFSET ?
+    `;
+    
+    const [rows] = await db.query(dataQuery, [...params, limit, offset]);
+    
+    // Calculate pagination info
+    const totalPages = Math.ceil(total / limit);
+    const hasNextPage = page < totalPages;
+    const hasPrevPage = page > 1;
+    
+    res.status(200).json({
+      success: true,
+      data: rows,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalItems: total,
+        itemsPerPage: limit,
+        hasNextPage,
+        hasPrevPage,
+        nextPage: hasNextPage ? page + 1 : null,
+        prevPage: hasPrevPage ? page - 1 : null
+      }
+    });
+    
+  } catch (err) {
+    console.error("Paginated Assets Error:", err);
+    res.status(500).json({ 
+      success: false,
+      message: "Failed to fetch paginated assets" 
+    });
+  }
+};
+
+
