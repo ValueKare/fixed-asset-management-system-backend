@@ -19,6 +19,13 @@ const departmentSchema = new mongoose.Schema(
       trim: true
     },
 
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Entity",
+      required: true,
+      index: true
+    },
+
     hospitalId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Hospital",

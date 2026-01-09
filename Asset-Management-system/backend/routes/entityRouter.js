@@ -353,6 +353,7 @@
  */
 // backend/routes/entityRouter.js
 import express from "express";
+import mongoose from "mongoose";
 import {
   createEntity,
   getAllEntities,
@@ -421,7 +422,7 @@ router.post("/",authMiddleware,
  *       200:
  *         description: List of entities
  */
-router.get("/", getAllEntities);
+router.get("/api/entity", getAllEntities);
 
 /**
  * @swagger
@@ -573,8 +574,43 @@ router.put("/api/v1/floors/:floorId", async (req, res) => {
 
 // --- DEPARTMENT ---
 router.get("/api/v1/organizations/:orgId/departments", async (req, res) => {
+  try {
+    const Department = (await import("../Models/Department.js")).default;
+    const Entity = (await import("../Models/Entity.js")).default;
+    
+    const { orgId } = req.params;
+    
+    // Check if orgId is a valid ObjectId or a string code
+    let organizationId;
+    if (mongoose.Types.ObjectId.isValid(orgId)) {
+      organizationId = orgId;
+    } else {
+      // Find entity by code and get its ObjectId
+      const entity = await Entity.findOne({ code: orgId });
+      if (!entity) {
+        return res.status(404).json({ 
+          success: false, 
+          message: "Organization not found" 
+        });
+      }
+      organizationId = entity._id;
+    }
+    
+    const departments = await Department.find({ organizationId });
+    res.json({ success: true, data: { departments } });
+  } catch (error) {
+    console.error("Error fetching departments:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch departments", 
+      error: error.message 
+    });
+  }
+});
+
+router.get("/api/v1/hospitals/:hospitalId/departments", async (req, res) => {
   const Department = (await import("../Models/Department.js")).default;
-  const departments = await Department.find({ organizationId: req.params.orgId });
+  const departments = await Department.find({ hospitalId: req.params.hospitalId });
   res.json({ success: true, data: { departments } });
 });
 

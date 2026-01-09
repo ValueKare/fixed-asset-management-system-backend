@@ -94,7 +94,7 @@ export const userLogin = async (req, res) => {
     }
 
     // 3️⃣ Verify password
-    const passwordMatch = await bcrypt.compare(password, employee.password);
+    const passwordMatch = await bcrypt.compare(password, employee.password || employee.temporaryPassword);
     if (!passwordMatch) {
       return res.status(401).json({
         success: false,

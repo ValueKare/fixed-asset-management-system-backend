@@ -77,7 +77,7 @@ app.use("/api/upload/hospital", hospitalUpload);   // hospital_assets
 app.use("/api/upload", uploadRouter); 
 // Other APIs
 app.use("/api/barcode", barcodeRouter);
-app.use("/api/entity", entityRouter);
+app.use("/", entityRouter);
 app.use("/api/roles", roleRouter);
 
 app.use("/api/admin", adminRouter);

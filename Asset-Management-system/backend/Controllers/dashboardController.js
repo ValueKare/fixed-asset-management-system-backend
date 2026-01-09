@@ -346,6 +346,12 @@ export const costTrends = async (req, res) => {
  */
 export const getHospitalsByEntity = async (req, res) => {
   try {
+    // Add cache control headers to prevent caching
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.set('Surrogate-Control', 'no-store');
+    
     const { entityCode } = req.query;
     
     if (entityCode) {

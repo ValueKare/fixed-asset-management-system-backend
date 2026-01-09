@@ -50,8 +50,9 @@ const employeeSchema = new mongoose.Schema(
     },
 
     department: {
-      type: String,
-      trim: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Department",
+      required: true,
     },
 
     ward: {
