@@ -32,7 +32,17 @@ const adminSchema = new mongoose.Schema({
   lastLogin: { type: Date },
   lastLogout: { type: Date },
   organizationId: { type: String, required: true }, // For superadmin
-  hospitalId: { type: mongoose.Schema.Types.ObjectId, ref: "Hospital" } // For admins created by superadmin
+  hospitalId: { type: mongoose.Schema.Types.ObjectId, ref: "Hospital" }, // For admins created by superadmin
+  currentSessionToken: {
+    type: String,
+    default: null,
+    index: true
+  },
+  sessionIssuedAt: {
+    type: Date,
+    default: null
+  }
+
 });
 
 

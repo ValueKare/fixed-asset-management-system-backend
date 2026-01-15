@@ -3,7 +3,7 @@ import cors from "cors";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
-          
+import { startRequestEscalationCron } from "./Cron/escalateRequests.js";   
 // app.js or server.js
 import ScrapRoutes from "./routes/ScrapRoutes.js";
 
@@ -110,5 +110,10 @@ initMongoCollections();
 app.listen(port, "0.0.0.0",() => {
   console.log(`Server running on port ${port}`);
 });
+
+
+
+startRequestEscalationCron();
+
 
 

@@ -130,6 +130,16 @@ const employeeSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    currentSessionToken: {
+      type: String,
+      default: null,
+      index: true
+    },
+    sessionIssuedAt: {
+      type: Date,
+      default: null
+    },
+
   },
   {
     timestamps: true, // automatically adds createdAt & updatedAt

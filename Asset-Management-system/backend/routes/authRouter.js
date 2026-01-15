@@ -12,7 +12,8 @@ import {
   getOnlineUsers,
   adminSignup,
   userLogin,
-  login
+  login,
+  validateSession       // NEW
 } from "../Controllers/authController.js";
 import {
   refreshAccessToken,
@@ -1236,5 +1237,87 @@ authRouter.get("/online-users", getOnlineUsers);
  *                 details: null
  */
 authRouter.post("/user/login", userLogin);
+
+/**
+ * @swagger
+ * /api/auth/validate-session:
+ *   get:
+ *     summary: Validate user session
+ *     tags: [Authentication]
+ *     description: Validates if the current session token is still active and not invalidated by a new login
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: Authorization
+ *         description: Bearer token for session validation
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *     responses:
+ *       200:
+ *         description: Session is valid
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     userId:
+ *                       type: string
+ *                       example: "64f1a2b3c4d5e6f7g8h9i0j1"
+ *                     isOnline:
+ *                       type: boolean
+ *                       example: true
+ *                     sessionIssuedAt:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2024-01-09T10:00:00.000Z"
+ *       401:
+ *         description: Session invalid or token issues
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       enum: ["NO_TOKEN", "INVALID_TOKEN", "TOKEN_EXPIRED", "SESSION_INVALIDATED"]
+ *                     message:
+ *                       type: string
+ *                       example: "Session invalidated by new login"
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: "SERVER_ERROR"
+ *                     message:
+ *                       type: string
+ *                       example: "Internal server error"
+ */
+authRouter.get("/validate-session", validateSession);
 
 export default authRouter;

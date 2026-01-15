@@ -277,6 +277,15 @@ export const login = async (req, res) => {
       },
       `${expiresInSeconds}s`
     );
+    // 5️⃣ Generate token
+
+// 🔒 ENFORCE SINGLE SESSION (NEW)
+    user.currentSessionToken = accessToken;
+    user.sessionIssuedAt = new Date();
+    user.isOnline = true;
+    user.lastLogin = new Date();
+
+    await user.save();
 
     // 6️⃣ Response (frontend needs)
     return res.status(200).json({
@@ -928,5 +937,80 @@ export const getOnlineUsers = async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Session Validation Endpoint
+export const validateSession = async (req, res) => {
+  try {
+    const { verifyToken } = await import("../Utils/jwt.js");
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: { code: "NO_TOKEN", message: "No token provided" }
+      });
+    }
+
+    // Verify token
+    const decoded = verifyToken(token);
+    
+    // Find user and check if current session token matches
+    let user = null;
+    
+    // Check Admin collection
+    user = await Admin.findOne({ 
+      _id: decoded.sub,
+      currentSessionToken: token,
+      isOnline: true 
+    });
+    
+    // Check Employee collection if not found in Admin
+    if (!user) {
+      user = await Employee.findOne({ 
+        _id: decoded.sub,
+        currentSessionToken: token,
+        isOnline: true 
+      });
+    }
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: { code: "SESSION_INVALIDATED", message: "Session invalidated by new login" }
+      });
+    }
+
+    // Session is valid
+    return res.status(200).json({
+      success: true,
+      data: {
+        userId: user._id,
+        isOnline: user.isOnline,
+        sessionIssuedAt: user.sessionIssuedAt
+      }
+    });
+
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({
+        success: false,
+        error: { code: "INVALID_TOKEN", message: "Invalid token" }
+      });
+    }
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        success: false,
+        error: { code: "TOKEN_EXPIRED", message: "Token expired" }
+      });
+    }
+
+    console.error("Session validation error:", error);
+    return res.status(500).json({
+      success: false,
+      error: { code: "SERVER_ERROR", message: "Internal server error" }
+    });
   }
 };

@@ -46,7 +46,7 @@ export const authMiddleware = async (req, res, next) => {
     if (decoded.userType === "admin") {
       user = await Admin.findById(decoded.sub).select("_id email organizationId hospitalId");
     } else {
-      user = await Employee.findById(decoded.sub).select("_id name organizationId hospital");
+      user = await Employee.findById(decoded.sub).select("_id name organizationId hospital department");
     }
 
     if (!user) {

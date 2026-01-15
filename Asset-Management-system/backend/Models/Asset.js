@@ -9,7 +9,6 @@ const assetSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  quantity: { type: String, required: true },
   category: { type: String },
   costCentre: { type: String },
   departmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Department" },
@@ -18,12 +17,40 @@ const assetSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Building",
   },
+  currentDepartmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Department",
+    required: true,
+    index: true
+  },
+
   floorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Floor",
   },
   vendor: String,
-
+  reservation: {
+    isReserved: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    requestId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Request",
+      default: null,
+      index: true
+    },
+    reservedByDepartmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Department",
+      default: null
+    },
+    reservedAt: {
+      type: Date,
+      default: null
+    }
+  },
   status: {
     type: String,
     enum: ["active", "maintenance", "disposed"],
