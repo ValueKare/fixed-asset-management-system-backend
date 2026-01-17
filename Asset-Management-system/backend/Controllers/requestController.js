@@ -3,9 +3,9 @@
 import Request from "../Models/Request.js";
 import logger from "../Utils/logger.js";
 import mongoose from "mongoose";
+import Asset from "../Models/Asset.js";
 import Entity from "../Models/Entity.js";
 import Department from "../Models/Department.js";
-import Asset from "../Models/Asset.js";
 
 // Helper function to convert string ID to ObjectId if needed
 const toObjectId = (id) => {
@@ -1013,6 +1013,63 @@ export const fulfillAssetRequest = async (req, res) => {
   } catch (err) {
     console.error("fulfillAssetRequest error:", err);
     res.status(500).json({ message: "Failed to fulfill request" });
+  }
+};
+
+export const getDepartmentAssets = async (req, res) => {
+  try {
+    const departmentId = req.user.department;
+    const hospitalId = req.user.hospital;
+
+    const assets = await Asset.find({
+      currentDepartmentId: departmentId,
+      hospitalId,
+      lifecycleStatus: { $ne: "scrapped" }
+    })
+      .populate("reservation.requestId", "assetName priority finalStatus")
+      .sort({ assetName: 1 });
+
+    return res.status(200).json({
+      success: true,
+      count: assets.length,
+      data: assets
+    });
+  } catch (err) {
+    console.error("getDepartmentAssets error:", err);
+    res.status(500).json({ message: "Failed to fetch assets" });
+  }
+};
+
+export const updateAssetUtilizationStatus = async (req, res) => {
+  try {
+    const { assetId } = req.params;
+    const { utilizationStatus } = req.body;
+
+    if (!["in_use", "not_in_use", "under_maintenance"].includes(utilizationStatus)) {
+      return res.status(400).json({ message: "Invalid utilization status" });
+    }
+
+    const asset = await Asset.findOne({
+      _id: assetId,
+      currentDepartmentId: req.user.department,
+      hospitalId: req.user.hospital
+    });
+
+    if (!asset) {
+      return res.status(404).json({ message: "Asset not found" });
+    }
+
+    asset.utilizationStatus = utilizationStatus;
+    await asset.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Asset status updated",
+      asset
+    });
+  } catch (err) {
+    console.error("updateAssetUtilizationStatus error:", err);
+    res.status(500).json({ message: "Failed to update status" });
   }
 };
 

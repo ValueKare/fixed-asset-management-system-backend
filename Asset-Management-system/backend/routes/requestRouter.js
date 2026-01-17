@@ -17,6 +17,8 @@ import {
   getDepartmentIdealAssets,
   createSpecificAssetRequest,
   fulfillAssetRequest,
+  getDepartmentAssets,
+  updateAssetUtilizationStatus,
 } from "../Controllers/requestController.js";
 
 const router = express.Router();
@@ -73,14 +75,14 @@ const router = express.Router();
 router.post(
   "/",
   authMiddleware,
-  requirePermission("user","assign_role"),
+  requirePermission("asset","transfer"),
   createRequest
 );
 
 router.get(
   "/open",
   authMiddleware,
-  requirePermission("user","assign_role"),
+  requirePermission("asset","transfer"),
   getOpenRequests
 );
 
@@ -101,7 +103,7 @@ router.get(
 router.get(
   "/departments-with-assets",
   authMiddleware,
-  requirePermission("user","assign_role"),
+  requirePermission("asset","transfer"),
   getDepartmentsWithAssets
 );
 
@@ -129,7 +131,7 @@ router.get(
 router.get(
   "/departments/:departmentId/assets",
   authMiddleware,
-  requirePermission("user","assign_role"),
+  requirePermission("asset","transfer"),
   getDepartmentIdealAssets
 );
 
@@ -178,188 +180,9 @@ router.get(
 router.post(
   "/specific-assets",
   authMiddleware,
-  requirePermission("user","assign_role"),
+  requirePermission("asset","transfer"),
   createSpecificAssetRequest
 );
-/**
- * @swagger
- * /api/requests/my:
- *   get:
- *     summary: Get logged-in user's requests
- *     tags: [Requests]
- *     security:
- *       - cookieAuth: []
- *     responses:
- *       200:
- *         description: List of user's requests
- */
-router.get("/my", protect, getMyRequests);
-
-/**
- * @swagger
- * /api/requests/pending:
- *   get:
- *     summary: Get pending requests for current approver
- *     tags: [Requests]
- *     security:
- *       - cookieAuth: []
- *     responses:
- *       200:
- *         description: List of pending requests for approver
- *       403:
- *         description: User not part of approval workflow
- */
-router.get(
-  "/pending",
-  protect,
-  requireRole(
-    "level1",
-    "level2",
-    "level3",
-    "hod",
-    "inventory",
-    "purchase",
-    "budget",
-    "cfo",
-    "admin"
-  ),
-  getPendingForMe
-);
-
-/**
- * @swagger
- * /api/requests/{id}:
- *   get:
- *     summary: Get full request details including approval timeline
- *     tags: [Requests]
- *     security:
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Request ID (MongoDB ObjectId)
- *     responses:
- *       200:
- *         description: Request details
- *       404:
- *         description: Request not found
- */
-router.get("/:id", protect, getRequestById);
-
-/**
- * @swagger
- * /api/requests/{id}/approve:
- *   post:
- *     summary: Approve request at current workflow level
- *     tags: [Requests]
- *     security:
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         description: Request ID
- *         schema:
- *           type: string
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               remarks:
- *                 type: string
- *     responses:
- *       200:
- *         description: Request approved successfully
- *       403:
- *         description: User not authorized to approve this level
- *       404:
- *         description: Request not found
- */
-router.post(
-  "/:id/approve",
-  protect,
-  requireRole(
-    "level1",
-    "level2",
-    "level3",
-    "hod",
-    "inventory",
-    "purchase",
-    "budget",
-    "cfo",
-    "admin"
-  ),
-  approveRequest
-);
-
-/**
- * @swagger
- * /api/requests/{id}/reject:
- *   post:
- *     summary: Reject request at current level
- *     tags: [Requests]
- *     security:
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         description: Request ID
- *         schema:
- *           type: string
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               remarks:
- *                 type: string
- *     responses:
- *       200:
- *         description: Request rejected
- *       403:
- *         description: Unauthorized rejection
- *       404:
- *         description: Request not found
- */
-router.post(
-  "/:id/reject",
-  protect,
-  requireRole(
-    "level1",
-    "level2",
-    "level3",
-    "hod",
-    "inventory",
-    "purchase",
-    "budget",
-    "cfo",
-    "admin"
-  ),
-  rejectRequest
-);
-
-/**
- * @swagger
- * /api/requests/admin/all:
- *   get:
- *     summary: Get all requests (Admin only)
- *     tags: [Requests]
- *     security:
- *       - cookieAuth: []
- *     responses:
- *       200:
- *         description: All requests
- *       403:
- *         description: Admin only access
- */
-router.get("/admin/all", protect, requireRole("admin"), getAllRequests);
 
 /**
  * @swagger
@@ -462,5 +285,74 @@ router.post(
   requirePermission("asset","transfer"),
   rejectRequestAssets
 );
+
+/**
+ * @swagger
+ * /api/requests/assets/department:
+ *   get:
+ *     summary: Get assets for user's department
+ *     tags: [Requests]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Assets retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 count:
+ *                   type: number
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       500:
+ *         description: Server error
+ */
+router.get("/assets/department", authMiddleware,requirePermission("asset","transfer"), getDepartmentAssets);
+
+/**
+ * @swagger
+ * /api/requests/assets/{assetId}/utilization:
+ *   put:
+ *     summary: Update asset utilization status
+ *     tags: [Requests]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: assetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Asset ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - utilizationStatus
+ *             properties:
+ *               utilizationStatus:
+ *                 type: string
+ *                 enum: [in_use, not_in_use, under_maintenance]
+ *                 description: New utilization status
+ *     responses:
+ *       200:
+ *         description: Asset status updated successfully
+ *       400:
+ *         description: Invalid utilization status
+ *       404:
+ *         description: Asset not found
+ *       500:
+ *         description: Server error
+ */
+router.put("/assets/:assetId/utilization", authMiddleware, requirePermission("asset","transfer"),updateAssetUtilizationStatus);
 
 export default router;

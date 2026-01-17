@@ -101,7 +101,7 @@ export const addEmployee = async (req, res, next) => {
             ward,
             role,
             roleId,
-            panel,
+            panel: "user",
             parentUserId,
             permissions: permissions || {},
             joinedDate: joinedDate ? new Date(joinedDate) : new Date(),
