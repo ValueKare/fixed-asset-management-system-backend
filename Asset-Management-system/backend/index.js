@@ -3,13 +3,16 @@ import cors from "cors";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
-import { startRequestEscalationCron } from "./Cron/escalateRequests.js";   
+          
 // app.js or server.js
 import ScrapRoutes from "./routes/ScrapRoutes.js";
 
 import connectDB from "./Config/dbConfig.js";
 import { pool } from "./Config/mysql.js";
 import { initMongoCollections } from "./Config/mongoSetup.js";
+
+
+
 
 // Routers
 import csvRouter from "./routes/nbcUpload.js";
@@ -28,7 +31,7 @@ import entityRouter from "./routes/entityRouter.js";
 import userRouter from "./routes/userRouter.js"
 import roleRouter from "./routes/roleRouter.js"
 import dashboardRoutes from "./routes/dashboardRoutes.js";
-
+import auditRoutes from "./routes/auditRoutes.js"
 
 
 // Middleware
@@ -77,7 +80,7 @@ app.use("/api/upload/hospital", hospitalUpload);   // hospital_assets
 app.use("/api/upload", uploadRouter); 
 // Other APIs
 app.use("/api/barcode", barcodeRouter);
-app.use("/", entityRouter);
+app.use("/api/entity", entityRouter);
 app.use("/api/roles", roleRouter);
 
 app.use("/api/admin", adminRouter);
@@ -89,6 +92,7 @@ app.use("/api/reports", reportRouter);
 app.use("/api/hospital", hospitalRoutes);
 app.use("/api/scrap", ScrapRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/audit", auditRoutes);
 
 // Error handler
 app.use(errorHandler);
@@ -110,10 +114,5 @@ initMongoCollections();
 app.listen(port, "0.0.0.0",() => {
   console.log(`Server running on port ${port}`);
 });
-
-
-
-startRequestEscalationCron();
-
 
 
