@@ -6,12 +6,160 @@ import mongoose from "mongoose";
 import Asset from "../Models/Asset.js";
 import Entity from "../Models/Entity.js";
 import Department from "../Models/Department.js";
+import Notification from "../Models/Notification.js";
+import Employee from "../Models/Employee.js";
+import { sendEmail } from "../Utils/nodemailer.js";
+import socketManager from "../Utils/socketManager.js";
 
 // Helper function to convert string ID to ObjectId if needed
 const toObjectId = (id) => {
   return typeof id === 'string' && mongoose.Types.ObjectId.isValid(id) 
     ? new mongoose.Types.ObjectId(id) 
     : id;
+};
+
+/**
+ * Send notifications to department users about asset requests
+ */
+const sendDepartmentNotifications = async (request, assets) => {
+  try {
+    console.log("🔔 sendDepartmentNotifications - START");
+    console.log("  Request ID:", request._id);
+    console.log("  Request Priority:", request.priority);
+    console.log("  Assets count:", assets.length);
+    console.log("  Assets:", assets.map(a => ({ id: a._id, name: a.assetName, department: a.currentDepartmentId })));
+
+    // Get unique departments from requested assets
+    const departmentIds = [...new Set(assets.map(asset => asset.currentDepartmentId))];
+    console.log("  Department IDs to notify:", departmentIds);
+    
+    for (const departmentId of departmentIds) {
+      console.log(`🏢 Processing department: ${departmentId}`);
+      
+      // Find all employees in department
+      const departmentUsers = await Employee.find({
+        department: departmentId,
+        status: "Active"
+      }).populate("roleId");
+
+      console.log(`  Found ${departmentUsers.length} active users in department`);
+      
+      // Log all users found
+      departmentUsers.forEach((user, index) => {
+        console.log(`    User ${index + 1}: ${user.name} (${user.email})`);
+        console.log(`      Role: ${user.roleId?.name || 'No role'}`);
+        console.log(`      Permissions:`, user.roleId?.permissions || 'No permissions');
+      });
+
+      // Filter users who have permission to view/transfer assets
+      const notifiedUsers = departmentUsers.filter(user => {
+        const hasTransferPermission = user.roleId?.permissions?.asset?.transfer;
+        const hasViewPermission = user.roleId?.permissions?.asset?.view;
+        const canNotify = hasTransferPermission || hasViewPermission;
+        
+        console.log(`    ${user.name} - Transfer: ${hasTransferPermission}, View: ${hasViewPermission}, Can Notify: ${canNotify}`);
+        return canNotify;
+      });
+
+      console.log(`  Users with permissions to notify: ${notifiedUsers.length}`);
+
+      if (notifiedUsers.length === 0) {
+        console.log(`  ⚠️ No eligible users found in department ${departmentId}`);
+        continue;
+      }
+
+      // Create notification for each user
+      for (const user of notifiedUsers) {
+        console.log(`📧 Sending notification to: ${user.name} (${user.email})`);
+        
+        const notificationId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        try {
+          const notification = await Notification.create({
+            id: notificationId,
+            type: "asset_request",
+            priority: request.priority === "high" ? "critical" : "info",
+            title: "Asset Transfer Request",
+            message: `New asset transfer request for ${assets.length} asset(s): ${assets.map(a => a.assetName).join(", ")}`,
+            from: {
+              id: request.requestedBy,
+              name: "Asset Management System",
+              role: "system"
+            },
+            to: {
+              id: user._id.toString(),
+              name: user.name,
+              email: user.email
+            },
+            metadata: {
+              requestId: request._id,
+              assetIds: assets.map(a => a._id),
+              departmentId: departmentId,
+              priority: request.priority
+            },
+            timestamp: new Date()
+          });
+          console.log(`  ✅ Notification created: ${notification._id}`);
+          
+          // Send real-time notification
+          socketManager.sendToUser(user._id.toString(), "new_notification", {
+            id: notification.id,
+            type: notification.type,
+            title: notification.title,
+            message: notification.message,
+            from: notification.from,
+            to: notification.to,
+            metadata: notification.metadata,
+            timestamp: notification.timestamp
+          });
+          
+        } catch (notifError) {
+          console.error(`  ❌ Failed to create notification for ${user.name}:`, notifError);
+        }
+
+        // Send email notification
+        const emailSubject = `🔄 Asset Transfer Request - ${request.priority.toUpperCase()} Priority`;
+        const emailText = `
+Dear ${user.name},
+
+A new asset transfer request has been created that requires your attention:
+
+Request Details:
+- Request ID: ${request._id}
+- Assets: ${assets.map(a => `${a.assetName} (${a.assetTag})`).join(", ")}
+- Priority: ${request.priority}
+- Justification: ${request.justification}
+- Requested By: ${request.requestedBy}
+
+Please log in to the system to review and process this request.
+
+Best regards,
+Asset Management System
+        `;
+
+        console.log(`  📨 Sending email to: ${user.email}`);
+        console.log(`  📧 Email subject: ${emailSubject}`);
+        
+        try {
+          const emailResult = await sendEmail({
+            to: user.email,
+            subject: emailSubject,
+            text: emailText
+          });
+          console.log(`  📧 Email result:`, emailResult);
+        } catch (emailError) {
+          console.error(`  ❌ Failed to send email to ${user.email}:`, emailError);
+        }
+      }
+
+      console.log(`✅ Completed notifications for department ${departmentId}`);
+    }
+    
+    console.log("🔔 sendDepartmentNotifications - COMPLETE");
+  } catch (error) {
+    console.error("❌ CRITICAL ERROR in sendDepartmentNotifications:", error);
+    console.error("Stack trace:", error.stack);
+  }
 };
 
 /**
@@ -892,6 +1040,9 @@ export const createSpecificAssetRequest = async (req, res) => {
         }
       }
     );
+
+    // Send notifications to department users
+    await sendDepartmentNotifications(request, assets);
 
     return res.status(201).json({
       success: true,

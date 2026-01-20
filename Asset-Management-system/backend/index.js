@@ -3,6 +3,8 @@ import cors from "cors";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
+import { createServer } from "http";
+import socketManager from "./Utils/socketManager.js";
           
 // app.js or server.js
 import ScrapRoutes from "./routes/ScrapRoutes.js";
@@ -47,6 +49,7 @@ import initMySQLSchema from "./Config/mysqlSetup.js";
 
 
 const app = express();
+const server = createServer(app);
 const port = process.env.SERVER_PORT || process.env.PORT || 5001;
 
 // ---------------- Middleware ----------------
@@ -110,8 +113,11 @@ dotenv.config();
 connectDB();
 initMongoCollections();
 
+// Initialize Socket.IO
+socketManager.initialize(server);
+
 // Server
-app.listen(port, "0.0.0.0",() => {
+server.listen(port, "0.0.0.0",() => {
   console.log(`Server running on port ${port}`);
 });
 
