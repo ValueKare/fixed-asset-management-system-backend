@@ -298,8 +298,9 @@ export const login = async (req, res) => {
           email: user.email,
           role: user.roleId.name,     // UI label
           panel: user.panel || null,
+          department: user.department || null,  // Only for employees
           organizationId: user.organizationId,
-          hospitalId: user.hospitalId || null
+          hospitalId: user.hospitalId || user.hospital || null  // Admin uses hospitalId, Employee uses hospital
         }
       }
     });

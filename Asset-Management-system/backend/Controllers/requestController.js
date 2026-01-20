@@ -977,12 +977,24 @@ export const fulfillAssetRequest = async (req, res) => {
         name: asset.assetName,
         status: asset.status,
         lifecycleStatus: asset.lifecycleStatus,
-        reservation: asset.reservation
+        currentDepartmentId: asset.currentDepartmentId,
+        userDepartmentId: req.user.department
       });
     });
 
     if (assets.length !== assetIds.length) {
       return res.status(409).json({ message: "Asset conflict detected" });
+    }
+
+    // Validate that user's department currently owns these assets
+    for (const asset of assets) {
+      if (String(asset.currentDepartmentId) !== String(req.user.department)) {
+        return res.status(403).json({ 
+          message: `Asset ${asset.assetName} is not owned by your department. 
+                   Current department: ${asset.currentDepartmentId}, 
+                   Your department: ${req.user.department}` 
+        });
+      }
     }
 
     // Fulfill assets
