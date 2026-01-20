@@ -613,11 +613,19 @@ export const rejectRequestAssets = async (req, res) => {
       return res.status(403).json({ message: "Cross-hospital access denied" });
     }
 
-    // Fetch only selected assets
+    // Fetch only selected assets (remove reservation check since assets might not be reserved yet)
+    console.log("Asset IDs to reject:", assetIds);
+    console.log("Request ID:", request._id);
+    
     const assets = await Asset.find({
-      _id: { $in: assetIds },
-      "reservation.requestId": request._id
+      _id: { $in: assetIds }
     });
+    
+    console.log("Found assets to reject:", assets.length);
+    console.log("Asset details:", assets.map(a => ({ 
+      id: a._id, 
+      reservation: a.reservation 
+    })));
 
     // Initialize rejectedAssets array if it doesn't exist
     if (!request.rejectedAssets) {
@@ -647,14 +655,34 @@ export const rejectRequestAssets = async (req, res) => {
     }
 
     // If all requested assets are resolved → close request
-    const totalRequested = request.requestedAssets ? 
+    const totalRequested = request.requestedAssets && request.requestedAssets.length > 0 ? 
       request.requestedAssets.length : 
       request.fulfillment.requestedCount;
     
-    const resolvedCount = request.fulfillment.fulfilledAssets.length;
-    if (resolvedCount >= totalRequested) {
+    const fulfilledCount = request.fulfillment.fulfilledAssets.length;
+    const rejectedCount = request.rejectedAssets.length;
+    const totalProcessed = fulfilledCount + rejectedCount;
+    
+    // Debug logs
+    console.log("=== rejectRequestAssets Debug ===");
+    console.log("Request ID:", request._id);
+    console.log("Total Requested:", totalRequested);
+    console.log("Fulfilled Count:", fulfilledCount);
+    console.log("Rejected Count:", rejectedCount);
+    console.log("Total Processed:", totalProcessed);
+    console.log("Requested Assets:", request.requestedAssets);
+    console.log("Fulfillment:", request.fulfillment);
+    console.log("Rejected Assets:", request.rejectedAssets);
+    console.log("================================");
+    
+    if (totalProcessed >= totalRequested) {
+      console.log("Closing request - all assets processed");
       request.currentLevel = "completed";
-      request.finalStatus = "approved"; // All assets processed
+      // Set final status based on whether any assets were fulfilled
+      request.finalStatus = fulfilledCount > 0 ? "approved" : "rejected";
+      console.log("Request closed with status:", request.finalStatus);
+    } else {
+      console.log("Request still open - not all assets processed");
     }
 
     request.escalation.lastActionAt = new Date();

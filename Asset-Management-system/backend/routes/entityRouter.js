@@ -422,7 +422,7 @@ router.post("/",authMiddleware,
  *       200:
  *         description: List of entities
  */
-router.get("/api/entity", getAllEntities);
+router.get("/", getAllEntities);
 
 /**
  * @swagger
