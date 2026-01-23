@@ -4,7 +4,10 @@ import {
   verifyAuditAsset,
   submitAudit,
   closeAudit,
-  getAuditSummary
+  getAuditSummary,
+  getAuditAssets,
+  getAuditAssetForVerification,
+  getAllAudits
 } from "../Controllers/auditController.js";
 
 import { authMiddleware } from "../Middlewares/authMiddleware.js";
@@ -18,6 +21,72 @@ const router = express.Router();
  *   name: Audit
  *   description: Audit lifecycle management APIs for Fixed Asset Management
  */
+
+/* ======================================================
+   GET ALL AUDITS
+====================================================== */
+/**
+ * @swagger
+ * /api/audit:
+ *   get:
+ *     summary: Get all audits with filtering and pagination
+ *     description: Returns paginated list of audits with statistics and filtering options.
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Items per page
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [planned, in_progress, submitted, closed, all]
+ *           default: all
+ *         description: Filter by audit status
+ *       - in: query
+ *         name: auditType
+ *         schema:
+ *           type: string
+ *           enum: [statutory, internal, physical, surprise, all]
+ *           default: all
+ *         description: Filter by audit type
+ *       - in: query
+ *         name: hospitalId
+ *         schema:
+ *           type: string
+ *         description: Filter by hospital ID
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search by audit code or type
+ *     responses:
+ *       200:
+ *         description: Audits fetched successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Permission denied
+ *       500:
+ *         description: Server error
+ */
+router.get(
+  "/",
+  authMiddleware,
+  requirePermission("audit", "verify"),
+  getAllAudits
+);
 
 /* ======================================================
    INITIATE AUDIT
@@ -145,6 +214,112 @@ router.put(
 );
 
 /* ======================================================
+   GET AUDIT ASSETS FOR VERIFICATION
+====================================================== */
+/**
+ * @swagger
+ * /api/audit/{auditId}/assets:
+ *   get:
+ *     summary: Get all assets for an audit with complete details
+ *     description: Returns paginated list of assets assigned to an audit with complete asset details for verification.
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: auditId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Audit ID
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Items per page
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [found, not_found, damaged, excess, all]
+ *           default: all
+ *         description: Filter by verification status
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search by asset key
+ *     responses:
+ *       200:
+ *         description: Audit assets fetched successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Permission denied
+ *       404:
+ *         description: Audit not found
+ *       500:
+ *         description: Server error
+ */
+router.get(
+  "/:auditId/assets",
+  authMiddleware,
+  requirePermission("audit", "verify"),
+  getAuditAssets
+);
+
+/* ======================================================
+   GET SINGLE AUDIT ASSET FOR VERIFICATION
+====================================================== */
+/**
+ * @swagger
+ * /api/audit/{auditId}/assets/{assetKey}:
+ *   get:
+ *     summary: Get detailed asset information for verification
+ *     description: Returns complete asset details with audit information and verification history.
+ *     tags: [Audit]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: auditId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Audit ID
+ *       - in: path
+ *         name: assetKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Asset key
+ *     responses:
+ *       200:
+ *         description: Asset verification details fetched successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Permission denied
+ *       404:
+ *         description: Audit asset not found
+ *       500:
+ *         description: Server error
+ */
+router.get(
+  "/:auditId/assets/:assetKey",
+  authMiddleware,
+  requirePermission("audit", "verify"),
+  getAuditAssetForVerification
+);
+
+/* ======================================================
    SUBMIT AUDIT
 ====================================================== */
 /**
@@ -254,7 +429,7 @@ router.put(
 router.get(
   "/summary/:auditId",
   authMiddleware,
-  requirePermission("audit", "view"),
+  requirePermission("audit", "verify"),
   getAuditSummary
 );
 

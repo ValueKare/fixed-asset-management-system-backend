@@ -3,6 +3,7 @@
 import Audit from "../Models/Audit.js";
 import AuditAsset from "../Models/AuditAsset.js";
 import Asset from "../Models/Asset.js";
+import Hospital from "../Models/Hospital.js";
 import {
   logAuditStarted,
   logAuditAssetVerified
@@ -30,10 +31,18 @@ export const initiateAudit = async (req, res) => {
       });
     }
 
+    // Find hospital by hospitalId string to get its ObjectId
+    const hospital = await Hospital.findOne({ hospitalId });
+    if (!hospital) {
+      return res.status(404).json({
+        message: "Hospital not found with given hospitalId"
+      });
+    }
+
     // Create Audit (Master)
     const audit = await Audit.create({
       auditCode,
-      hospitalId,
+      hospitalId: hospital._id, // Use ObjectId instead of string
       organizationId: req.user.organizationId,
       auditType,
       periodFrom,
@@ -45,13 +54,13 @@ export const initiateAudit = async (req, res) => {
     });
 
     // Fetch all assets for this hospital
-    const assets = await Asset.find({ hospitalId });
+    const assets = await Asset.find({ hospitalId: hospital._id });
 
     // Create audit-asset records
     const auditAssets = assets.map(asset => ({
       auditId: audit._id,
       assetKey: asset.assetKey,
-      hospitalId,
+      hospitalId: hospital._id, // Use ObjectId instead of string
       systemStatus: asset.status,
       physicalStatus: "found" // default, will be updated by auditor
     }));
@@ -199,7 +208,335 @@ export const closeAudit = async (req, res) => {
 };
 
 /* ======================================================
-   5️⃣ GET AUDIT SUMMARY
+   6️⃣ GET AUDIT ASSETS FOR VERIFICATION
+====================================================== */
+
+export const getAuditAssets = async (req, res) => {
+  try {
+    const { auditId } = req.params;
+    const { page = 1, limit = 20, status, search, departmentId } = req.query;
+
+    // Build filter
+    const filter = { auditId };
+    if (status && status !== 'all') {
+      filter.physicalStatus = status;
+    }
+    if (search) {
+      filter.assetKey = { $regex: search, $options: 'i' };
+    }
+
+    // Get audit assets with pagination
+    const skip = (page - 1) * limit;
+    const auditAssets = await AuditAsset.find(filter)
+      .populate('auditId', 'auditCode auditType status')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get complete asset details for each audit asset
+    const assetKeys = auditAssets.map(aa => aa.assetKey);
+    const assets = await Asset.find({ assetKey: { $in: assetKeys } })
+      .populate('departmentId', 'name')
+      .populate('hospitalId', 'name')
+      .populate('buildingId', 'name buildingCode address')
+      .populate('floorId', 'name floorNumber')
+      .populate('currentDepartmentId', 'name');
+
+    // Combine audit asset data with complete asset details
+    const auditAssetsWithDetails = auditAssets.map(auditAsset => {
+      const assetDetails = assets.find(asset => asset.assetKey === auditAsset.assetKey);
+      return {
+        ...auditAsset.toObject(),
+        assetDetails: assetDetails || null
+      };
+    });
+
+    // Department-wise segregation
+    const assetsByDepartment = {};
+    const departmentStats = {};
+    let totalAssets = 0;
+    let verifiedAssets = 0;
+    let discrepancyAssets = 0;
+
+    auditAssetsWithDetails.forEach(auditAsset => {
+      const deptId = auditAsset.assetDetails?.departmentId?._id || 'unassigned';
+      const deptName = auditAsset.assetDetails?.departmentId?.name || 'Unassigned';
+      
+      // Initialize department if not exists
+      if (!assetsByDepartment[deptId]) {
+        assetsByDepartment[deptId] = {
+          departmentId: deptId,
+          departmentName: deptName,
+          assets: [],
+          stats: {
+            total: 0,
+            verified: 0,
+            discrepancies: 0,
+            pending: 0
+          }
+        };
+      }
+
+      // Add asset to department
+      assetsByDepartment[deptId].assets.push(auditAsset);
+      
+      // Update department stats
+      assetsByDepartment[deptId].stats.total++;
+      totalAssets++;
+      
+      if (auditAsset.verifiedAt) {
+        assetsByDepartment[deptId].stats.verified++;
+        verifiedAssets++;
+      } else {
+        assetsByDepartment[deptId].stats.pending++;
+      }
+      
+      if (auditAsset.discrepancy) {
+        assetsByDepartment[deptId].stats.discrepancies++;
+        discrepancyAssets++;
+      }
+    });
+
+    // Convert to array and sort by department name
+    const departmentsArray = Object.values(assetsByDepartment).sort((a, b) => 
+      a.departmentName.localeCompare(b.departmentName)
+    );
+
+    // Get total count for pagination
+    const totalCount = await AuditAsset.countDocuments(filter);
+
+    // Get available departments for filtering
+    const assetsWithDepartments = await Asset.find({ 
+      assetKey: { $in: assetKeys },
+      departmentId: { $exists: true, $ne: null }
+    }).populate('departmentId', 'name').select('departmentId');
+    
+    // Extract unique departments
+    const allDepartments = [];
+    const seenDeptIds = new Set();
+    
+    assetsWithDepartments.forEach(asset => {
+      if (asset.departmentId && !seenDeptIds.has(asset.departmentId._id.toString())) {
+        seenDeptIds.add(asset.departmentId._id.toString());
+        allDepartments.push(asset.departmentId);
+      }
+    });
+
+    return res.json({
+      auditAssets: auditAssetsWithDetails,
+      assetsByDepartment: departmentsArray,
+      departmentStats: departmentsArray.reduce((acc, dept) => {
+        acc[dept.departmentId] = dept.stats;
+        return acc;
+      }, {}),
+      overallStats: {
+        totalAssets,
+        verifiedAssets,
+        discrepancyAssets,
+        pendingAssets: totalAssets - verifiedAssets,
+        verificationRate: totalAssets > 0 ? ((verifiedAssets / totalAssets) * 100).toFixed(2) : 0
+      },
+      availableDepartments: allDepartments,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalCount / limit),
+        totalCount,
+        limit: parseInt(limit)
+      }
+    });
+
+  } catch (err) {
+    console.error("❌ getAuditAssets failed:", err);
+    return res.status(500).json({
+      message: "Failed to fetch audit assets",
+      error: err.message
+    });
+  }
+};
+
+/* ======================================================
+   7️⃣ GET SINGLE AUDIT ASSET FOR VERIFICATION
+====================================================== */
+
+export const getAuditAssetForVerification = async (req, res) => {
+  try {
+    const { auditId, assetKey } = req.params;
+
+    // Get audit asset
+    const auditAsset = await AuditAsset.findOne({ auditId, assetKey })
+      .populate('auditId', 'auditCode auditType status');
+
+    if (!auditAsset) {
+      return res.status(404).json({
+        message: "Audit asset not found"
+      });
+    }
+
+    // Get complete asset details
+    const asset = await Asset.findOne({ assetKey })
+      .populate('departmentId', 'name')
+      .populate('hospitalId', 'name')
+      .populate('buildingId', 'name buildingCode address')
+      .populate('floorId', 'name floorNumber')
+      .populate('currentDepartmentId', 'name');
+
+    if (!asset) {
+      return res.status(404).json({
+        message: "Asset not found"
+      });
+    }
+
+    // Get verification history if any
+    const verificationHistory = await AuditAsset.find({
+      assetKey,
+      'verifiedAt': { $exists: true }
+    })
+    .populate('verifiedBy', 'name email')
+    .populate('auditId', 'auditCode auditType')
+    .sort({ verifiedAt: -1 })
+    .limit(5);
+
+    return res.json({
+      auditAsset: auditAsset,
+      asset: asset,
+      verificationHistory: verificationHistory,
+      verificationStatus: {
+        physicalStatus: auditAsset.physicalStatus,
+        locationMatched: auditAsset.locationMatched,
+        discrepancy: auditAsset.discrepancy,
+        auditorRemark: auditAsset.auditorRemark,
+        verifiedAt: auditAsset.verifiedAt,
+        verifiedBy: auditAsset.verifiedBy
+      }
+    });
+
+  } catch (err) {
+    console.error("❌ getAuditAssetForVerification failed:", err);
+    return res.status(500).json({
+      message: "Failed to fetch audit asset for verification",
+      error: err.message
+    });
+  }
+};
+
+/* ======================================================
+   9️⃣ GET ALL AUDITS
+====================================================== */
+
+export const getAllAudits = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      status, 
+      auditType, 
+      hospitalId,
+      search 
+    } = req.query;
+
+    // Build filter
+    const filter = {};
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+    if (auditType && auditType !== 'all') {
+      filter.auditType = auditType;
+    }
+    if (hospitalId) {
+      filter.hospitalId = hospitalId;
+    }
+    if (search) {
+      filter.$or = [
+        { auditCode: { $regex: search, $options: 'i' } },
+        { auditType: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Add organization filter if user is not superadmin
+    if (req.user.role !== 'superadmin') {
+      filter.organizationId = req.user.organizationId;
+    }
+
+    // Get audits with pagination
+    const skip = (page - 1) * limit;
+    const audits = await Audit.find(filter)
+      .populate('hospitalId', 'name hospitalId')
+      .populate('initiatedBy', 'name email')
+      .populate('assignedAuditors', 'name email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Get audit statistics for each audit
+    const auditIds = audits.map(audit => audit._id);
+    const auditStats = await AuditAsset.aggregate([
+      { $match: { auditId: { $in: auditIds } } },
+      {
+        $group: {
+          _id: '$auditId',
+          totalAssets: { $sum: 1 },
+          verifiedAssets: {
+            $sum: { $cond: [{ $ne: ['$verifiedAt', null] }, 1, 0] }
+          },
+          discrepancyAssets: {
+            $sum: { $cond: ['$discrepancy', 1, 0] }
+          }
+        }
+      }
+    ]);
+
+    // Combine audits with their statistics
+    const auditsWithStats = audits.map(audit => {
+      const stats = auditStats.find(stat => stat._id.toString() === audit._id.toString());
+      return {
+        ...audit.toObject(),
+        stats: stats || {
+          totalAssets: 0,
+          verifiedAssets: 0,
+          discrepancyAssets: 0,
+          verificationRate: 0
+        }
+      };
+    });
+
+    // Calculate verification rate
+    auditsWithStats.forEach(audit => {
+      const { totalAssets, verifiedAssets } = audit.stats;
+      audit.stats.verificationRate = totalAssets > 0 
+        ? ((verifiedAssets / totalAssets) * 100).toFixed(2) 
+        : 0;
+    });
+
+    // Get total count for pagination
+    const totalCount = await Audit.countDocuments(filter);
+
+    return res.json({
+      audits: auditsWithStats,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalCount / limit),
+        totalCount,
+        limit: parseInt(limit)
+      },
+      filters: {
+        status,
+        auditType,
+        hospitalId,
+        search
+      }
+    });
+
+  } catch (err) {
+    console.error("❌ getAllAudits failed:", err);
+    return res.status(500).json({
+      message: "Failed to fetch audits",
+      error: err.message
+    });
+  }
+};
+
+/* ======================================================
+   10️⃣ GET AUDIT SUMMARY
 ====================================================== */
 
 export const getAuditSummary = async (req, res) => {

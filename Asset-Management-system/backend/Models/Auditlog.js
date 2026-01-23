@@ -18,8 +18,7 @@ const auditLogSchema = new mongoose.Schema(
     },
 
     userRole: {
-      type: String,
-      required: true
+      type: String
       // superadmin, audit_admin, dept_admin
     },
 
@@ -43,8 +42,7 @@ const auditLogSchema = new mongoose.Schema(
     },
 
     organizationId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Organization",
+      type: String,
       index: true
     },
 

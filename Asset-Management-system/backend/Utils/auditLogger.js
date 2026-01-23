@@ -48,7 +48,7 @@ export const logAuditStarted = async (req, audit) => {
   await logAction({
     action: "AUDIT_STARTED",
     userId: req.user._id,
-    userRole: req.user.role,
+    userRole: req.user.role || "unknown",
     entityType: "Audit",
     entityId: audit._id,
     hospitalId: audit.hospitalId,
@@ -96,7 +96,7 @@ export const logAssetBulkUpload = async (req, { inserted, total, hospitalId }) =
   await logAction({
     action: "ASSET_BULK_UPLOAD",
     userId: req.user._id,
-    userRole: req.user.role,
+    userRole: req.user.role || "unknown",
     entityType: "Asset",
     entityId: null,
     hospitalId,

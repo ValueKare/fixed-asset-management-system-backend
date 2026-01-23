@@ -49,5 +49,5 @@ const auditSchema = new mongoose.Schema({
   
     remarks: String
   }, { timestamps: true });
-  export default mongoose.model("auditSchema", auditSchema);
+  export default mongoose.model("Audit", auditSchema);
             

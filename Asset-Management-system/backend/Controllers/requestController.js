@@ -373,6 +373,119 @@ export const createRequest = async (req, res) => {
 
 // backend/Controllers/requestController.js
 
+// export const getOpenRequests = async (req, res) => {
+//   try {
+//     // 🔒 Permission check
+//     if (!req.auth?.permissions?.asset?.transfer) {
+//       return res.status(403).json({
+//         success: false,
+//         message: "You are not allowed to fulfill asset requests"
+//       });
+//     }
+
+//     const hospitalId = req.user.hospital;
+
+//     // 🔍 Debug query construction
+//     console.log("🔍 getOpenRequests Debug:");
+//     console.log("  - User hospitalId:", hospitalId);
+//     console.log("  - User permissions:", req.auth?.permissions);
+
+//     // 🔍 Fetch open requests
+//     const query = {
+//       finalStatus: "pending",
+//       $or: [
+//         // Same hospital requests at any approval level
+//         { "scope.hospitalId": hospitalId },
+        
+//         // Cross-hospital requests escalated to level3
+//         {
+//           "scope.hospitalId": { $ne: hospitalId },
+//           currentLevel: "level3"
+//         }
+//       ]
+//     };
+    
+//     console.log("  - Query:", JSON.stringify(query, null, 2));
+    
+//     const requests = await Request.find(query)
+//       .populate("requestedBy", "name role")
+//       .populate("scope.departmentId", "name code")
+//       .populate("fulfillment.fulfilledAssets.assetId", "assetName assetTag")
+//       .populate("fulfillment.fulfilledAssets.fromDepartmentId", "name code")
+//       .sort({ createdAt: 1 });
+
+//     // Process requests to extract asset-department mapping
+//     const processedRequests = requests.map(request => {
+//       const assetDepartmentMap = new Map();
+      
+//       // For specific asset requests - map requested assets to their departments
+//       if (request.requestedAssets && request.requestedAssets.length > 0) {
+//         request.requestedAssets.forEach(assetId => {
+//           // Find the asset in fulfilled assets to get current department
+//           const fulfilledAsset = request.fulfillment?.fulfilledAssets?.find(
+//             f => f.assetId?.toString() === assetId.toString()
+//           );
+          
+//           if (fulfilledAsset) {
+//             assetDepartmentMap.set(assetId.toString(), {
+//               assetId: assetId,
+//               departmentId: fulfilledAsset.fromDepartmentId,
+//               departmentName: fulfilledAsset.fromDepartmentId?.name || 'Unknown',
+//               departmentCode: fulfilledAsset.fromDepartmentId?.code || 'Unknown'
+//             });
+//           } else {
+//             // Asset not yet fulfilled - get from Asset collection
+//             const asset = assets.find(a => a._id.toString() === assetId.toString());
+//             if (asset) {
+//               assetDepartmentMap.set(assetId.toString(), {
+//                 assetId: assetId,
+//                 departmentId: asset.currentDepartmentId,
+//                 departmentName: asset.departmentName || 'Unknown',
+//                 departmentCode: asset.departmentCode || 'Unknown'
+//               });
+//             }
+//           }
+//         });
+//       }
+      
+//       // For generic asset requests - map target department and notify all hospital departments
+//       else if (request.requestType === "asset_transfer" && request.fulfillment?.requestedCount) {
+//         // Get the target department information
+//         const targetDepartment = await Department.findById(request.scope.departmentId);
+        
+//         if (targetDepartment) {
+//           assetDepartmentMap.set("generic_request", {
+//             assetId: null,
+//             departmentId: targetDepartment._id,
+//             departmentName: targetDepartment.name,
+//             departmentCode: targetDepartment.code || targetDepartment._id.toString(),
+//             isGeneric: true,
+//             requestedCount: request.fulfillment.requestedCount,
+//             hospitalId: request.scope.hospitalId // Include hospital ID for frontend
+//           });
+//         }
+//       }
+      
+//       return {
+//         ...request.toObject(),
+//         assetDepartmentMap: Object.fromEntries(assetDepartmentMap)
+//       };
+//     });
+
+//     return res.status(200).json({
+//       success: true,
+//       count: processedRequests.length,
+//       data: processedRequests
+//     });
+
+//   } catch (error) {
+//     console.error("Get open requests error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to fetch open requests"
+//     });
+//   }
+// };
 export const getOpenRequests = async (req, res) => {
   try {
     // 🔒 Permission check
@@ -385,37 +498,97 @@ export const getOpenRequests = async (req, res) => {
 
     const hospitalId = req.user.hospital;
 
-    // 🔍 Debug query construction
-    console.log("🔍 getOpenRequests Debug:");
-    console.log("  - User hospitalId:", hospitalId);
-    console.log("  - User permissions:", req.auth?.permissions);
-
     // 🔍 Fetch open requests
     const query = {
       finalStatus: "pending",
       $or: [
-        // Same hospital requests at any approval level
         { "scope.hospitalId": hospitalId },
-        
-        // Cross-hospital requests escalated to level3
         {
           "scope.hospitalId": { $ne: hospitalId },
           currentLevel: "level3"
         }
       ]
     };
-    
-    console.log("  - Query:", JSON.stringify(query, null, 2));
-    
+
     const requests = await Request.find(query)
       .populate("requestedBy", "name role")
       .populate("scope.departmentId", "name code")
-      .sort({ createdAt: 1 });
+      .populate("fulfillment.fulfilledAssets.assetId", "assetName assetTag currentDepartmentId")
+      .populate("fulfillment.fulfilledAssets.fromDepartmentId", "name code")
+      .sort({ createdAt: 1 })
+      .lean(); // ⚡ faster & safer
+
+    // Collect assetIds
+    const assetIds = requests.flatMap(r => r.requestedAssets || []);
+
+    const assets = await Asset.find({ _id: { $in: assetIds } })
+      .select("currentDepartmentId")
+      .populate("currentDepartmentId", "name code")
+      .lean();
+
+    const assetMap = new Map(
+      assets.map(a => [a._id.toString(), a])
+    );
+
+    const processedRequests = await Promise.all(
+      requests.map(async request => {
+        const assetDepartmentMap = new Map();
+
+        // 🎯 Specific asset requests
+        if (request.requestedAssets?.length) {
+          request.requestedAssets.forEach(assetId => {
+            const fulfilledAsset = request.fulfillment?.fulfilledAssets?.find(
+              f => f.assetId?._id.toString() === assetId.toString()
+            );
+
+            if (fulfilledAsset) {
+              assetDepartmentMap.set(assetId.toString(), {
+                assetId,
+                departmentId: fulfilledAsset.fromDepartmentId?._id,
+                departmentName: fulfilledAsset.fromDepartmentId?.name,
+                departmentCode: fulfilledAsset.fromDepartmentId?.code
+              });
+            } else {
+              const asset = assetMap.get(assetId.toString());
+              if (asset) {
+                assetDepartmentMap.set(assetId.toString(), {
+                  assetId,
+                  departmentId: asset.currentDepartmentId?._id,
+                  departmentName: asset.currentDepartmentId?.name,
+                  departmentCode: asset.currentDepartmentId?.code
+                });
+              }
+            }
+          });
+        }
+
+        // 📦 Generic asset request
+        if (
+          request.requestType === "asset_transfer" &&
+          request.fulfillment?.requestedCount
+        ) {
+          assetDepartmentMap.set("generic_request", {
+            assetId: null,
+            departmentId: request.scope.departmentId?._id,
+            departmentName: request.scope.departmentId?.name,
+            departmentCode: request.scope.departmentId?.code,
+            isGeneric: true,
+            requestedCount: request.fulfillment.requestedCount,
+            hospitalId: request.scope.hospitalId
+          });
+        }
+
+        return {
+          ...request,
+          assetDepartmentMap: Object.fromEntries(assetDepartmentMap)
+        };
+      })
+    );
 
     return res.status(200).json({
       success: true,
-      count: requests.length,
-      data: requests
+      count: processedRequests.length,
+      data: processedRequests
     });
 
   } catch (error) {
