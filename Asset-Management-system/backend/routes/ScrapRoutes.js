@@ -11,7 +11,7 @@ import {
   getAllScrapRequests,
   approveScrapRequest,
   rejectScrapRequest
-} from "../controllers/ScrapController.js";
+} from "../Controllers/ScrapController.js";
 
 import { protect } from "../middlewares/authMiddleware.js";
 import { requireRole } from "../middlewares/roleMiddleware.js";
