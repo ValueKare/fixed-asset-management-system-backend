@@ -7,7 +7,7 @@ import Hospital from "../Models/Hospital.js";
 import {
   logAuditStarted,
   logAuditAssetVerified
-} from "../utils/auditLogger.js";
+} from "../Utils/auditLogger.js";
 
 /* ======================================================
    1️⃣ INITIATE AUDIT

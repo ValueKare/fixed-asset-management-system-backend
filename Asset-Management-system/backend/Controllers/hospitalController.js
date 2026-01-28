@@ -1,6 +1,6 @@
 import Hospital from "../Models/Hospital.js";
 import Entity from "../Models/Entity.js";
-import Counter from "../Models/Counter.js";
+import Counter from "../Models/counter.js";
 
 export const createHospital = async (req, res) => {
   try {
