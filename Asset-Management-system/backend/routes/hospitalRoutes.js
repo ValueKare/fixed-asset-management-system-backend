@@ -206,9 +206,90 @@ router.post("/", authMiddleware, requirePermission("user","assign_role"), create
  *                   example: Not authorized as superadmin or auditmanager
  */
 router.get("/", authMiddleware, requirePermission("user","assign_role"),getHospitals);
+/**
+ * @swagger
+ * /api/hospitals:
+ *   get:
+ *     summary: Get all hospitals
+ *     description: Fetches a list of all hospitals available in the system. Used for role assignment and hospital mapping.
+ *     tags: [Hospital]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Hospitals fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   _id:
+ *                     type: string
+ *                     example: 65f0c9b2e1a1c23abcd12345
+ *                   name:
+ *                     type: string
+ *                     example: City General Hospital
+ *                   code:
+ *                     type: string
+ *                     example: CGH-001
+ *       401:
+ *         description: Unauthorized – invalid or missing token
+ *       403:
+ *         description: Permission denied
+ *       500:
+ *         description: Server error
+ */
 
 router.put("/:hospitalId", authMiddleware, requirePermission("user","assign_role"),updateHospital);
+/**
+ * @swagger
+ * /api/hospitals/{hospitalId}:
+ *   put:
+ *     summary: Update hospital details
+ *     description: Updates hospital information such as name, code, or status. Restricted to users with role assignment permissions.
+ *     tags: [Hospital]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: hospitalId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Hospital ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: City General Hospital
+ *               code:
+ *                 type: string
+ *                 example: CGH-001
+ *               isActive:
+ *                 type: boolean
+ *                 example: true
+ *     responses:
+ *       200:
+ *         description: Hospital updated successfully
+ *       400:
+ *         description: Invalid request data
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Permission denied
+ *       404:
+ *         description: Hospital not found
+ *       500:
+ *         description: Server error
+ */
+
 
 export default router;
-
 

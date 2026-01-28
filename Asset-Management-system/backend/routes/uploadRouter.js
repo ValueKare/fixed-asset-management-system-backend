@@ -53,3 +53,21 @@ router.post(
 router.get("/ping", (req, res) => res.json({ ok: true, route: "/api/upload/ping" }));
 export default router;
 
+
+import { pool } from "../Config/mysql.js";
+
+/* TEMP DB TEST ROUTE */
+router.get("/db-test", async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT DATABASE() AS db");
+    res.json({
+      connected: true,
+      database: rows[0].db
+    });
+  } catch (err) {
+    res.status(500).json({
+      connected: false,
+      error: err.message
+    });
+  }
+});
